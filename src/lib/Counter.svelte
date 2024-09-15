@@ -14,7 +14,6 @@
       },
     }).Compile();
 
-
   function poll() {
     const newLines = [];
     while (story.canContinue) {
@@ -23,11 +22,11 @@
       console.log(line);
       newLines.push(line);
     }
-    
+
     lines = [...lines, ...newLines];
-    choices = story.currentChoices.map((c) => c.text);	
+    choices = story.currentChoices.map((c) => c.text);
     // if (story.currentChoices.length > 0) {
-      // console.log(story.currentChoices);
+    // console.log(story.currentChoices);
     // }
   }
 
@@ -38,17 +37,22 @@
 
   poll();
 </script>
+
 <div class="wrapper">
-<div class="glass">
-  <div class="screen greentheme">
-{#each lines as line}
-  <p>{line}</p>
-{/each}
-<ol>
-{#each choices as choice, choiceIndex}
-  <li><a href="#" on:click={() => handleChoice(choiceIndex)}>{choice}</a></li>
-{/each}
-</ol>
-</div>
-</div>
+  <div class="glass">
+    <div class="screen greentheme">
+      <div>
+        {#each lines as line}
+          <p>{line}</p>
+        {/each}
+        <ol>
+          {#each choices as choice, choiceIndex}
+            <li>
+              <button tabindex={choiceIndex} on:click={() => handleChoice(choiceIndex)}>{choice}</button>
+            </li>
+          {/each}
+        </ol>
+      </div>
+    </div>
+  </div>
 </div>
