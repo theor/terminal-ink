@@ -4,7 +4,21 @@
   console.log(data);
 
   let lines = [] as string[];
+  let tags = [] as string[];
   let choices = [] as string[];
+
+  interface TagAction {
+    action: () => void;
+    after?: boolean;
+  }
+  const tagActions: { [key: string]: TagAction } = {
+    clear: {
+      action: () => {
+        lines = [];
+      },
+      after: true,
+    },
+  };
 
   const story =
     // import.meta.env.DEV ?
@@ -14,16 +28,35 @@
       },
     }).Compile();
 
+
+story.onError = (m, t) => { console.log(m); };
+    story.BindExternalFunction("clear", (text: string) => {
+    console.log(text);
+  });
+
   function poll() {
-    const newLines = [];
+    // const newLines = [];
     while (story.canContinue) {
       const line = story.Continue();
       if (!line) break;
-      console.log(line);
-      newLines.push(line);
+
+      tags = story.currentTags || [];
+      if (story.currentTags) console.log(story.currentTags);
+      
+      
+    lines = [...lines, line];
+      // newLines.push(line);
+
+      const actions: TagAction[] = (story.currentTags ?? [])
+        .map((tag) => tagActions[tag])
+        .filter((a) => a);
+      actions.forEach((action) => {
+        // if (!action.after)
+        action.action();
+      });
     }
 
-    lines = [...lines, ...newLines];
+    // lines = [...lines, ...newLines];
     choices = story.currentChoices.map((c) => c.text);
     // if (story.currentChoices.length > 0) {
     // console.log(story.currentChoices);
@@ -31,8 +64,26 @@
   }
 
   function handleChoice(choice: number) {
+    const choiceObj = story.currentChoices[choice];
+    const actions: TagAction[] = (choiceObj.tags ?? [])
+      .map((tag) => tagActions[tag])
+      .filter((a) => a);
+
+    actions.forEach((action) => {
+      if (!action.after) action.action();
+    });
     story.ChooseChoiceIndex(choice);
+    actions.forEach((action) => {
+      if (!action.after) action.action();
+    });
     poll();
+  }
+  function onKeyDown(choice: number) {
+    return (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        handleChoice(choice);
+      }
+    };
   }
 
   poll();
@@ -48,10 +99,21 @@
         <ol>
           {#each choices as choice, choiceIndex}
             <li>
-              <button tabindex={choiceIndex} on:click={() => handleChoice(choiceIndex)}>{choice}</button>
+              <a
+                href="#/"
+                role="button"
+                tabindex={choiceIndex}
+                on:keydown={onKeyDown(choiceIndex)}
+                on:click={() => handleChoice(choiceIndex)}>{choice}</a
+              >
             </li>
           {/each}
         </ol>
+        <div class="tags">
+          {#each tags as tag}
+            <span>#{tag}</span>
+          {/each}
+        </div>
       </div>
     </div>
   </div>
