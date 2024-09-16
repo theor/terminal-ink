@@ -17,19 +17,23 @@ TE : 512897
  
 System Started                  
 === start ===
-   TRAC PC-9800                 
-Reythorne OS
+TRAC PC-9800 Series System Terminal
+Reythorne OS Version 6.20
+#delay
+#delay
 -> main
 
 = main
 #clear
->
+> INPUT
 
 +	Diagnostics
 	asd
 	+ + [Nice to hear from you!]
 	    -> main
 	+ + [back] -> main
-+	Controls -> main
++	Controls
+	Airlock: Opened
+	+ + [back] -> main
 +   Comms
 -> main

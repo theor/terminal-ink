@@ -22,13 +22,14 @@ export const typewriter: Action<
     if (deltaTime > duration) {
       start = time;
       const linePart = line.slice(0, index);
-      console.log("> tick", deltaTime, linePart);
+    //   console.log("> tick", deltaTime, linePart);
       node.textContent = linePart;
 
-      if (index < line.length - 1) {
+      if (index < line.length) {
         requestAnimationFrame(tick);
         index += 1;
       } else {
+        console.log("> done", line);
         node.dispatchEvent(new CustomEvent("done"));
       }
     } else {
@@ -37,11 +38,18 @@ export const typewriter: Action<
   };
   requestAnimationFrame(tick);
   return {
-    // update(newLine) {
+    update(newLine) {
+        if(newLine.line === line) return;
+        console.error("> update TYPEWRITER", line, newLine);
+        node.textContent = "";
+        line = newLine.line;
+        duration = newLine.duration;
+        index = 0;
+        tick(0);
     // //     line = newLine;
     // //     index = 0;
     // //     tick();
-    // },
+    },
     // destroy() {
     //     // the node has been removed from the DOM
     // }
