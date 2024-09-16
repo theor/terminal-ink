@@ -1,3 +1,4 @@
+EXTERNAL clear()
 -> start
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
@@ -19,12 +20,10 @@ System Started
 === start ===
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
-#delay
-#delay
 -> main
 
 = main
-#clear
+~ clear()
 > INPUT
 
 +	Diagnostics

@@ -352,3 +352,14 @@ pre {
 	pointer-events: none;
 	animation: scanline 5s linear infinite;
 }
+
+
+.debug-overlay {
+  position: fixed;
+  bottom: 2rem;
+  left: 0;
+  right: 0;
+  height: 4rem;
+  color: white;
+  font-size: 2rem;
+}

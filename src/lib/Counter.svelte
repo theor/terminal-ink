@@ -1,6 +1,6 @@
 <script lang="ts">
   import data from "../assets/story.ink?raw";
-  import { Story, Compiler } from "inkjs/full";
+  import { Story, Compiler, CompilerOptions } from "inkjs/full";
   // import Typewriter from "svelte-typewriter";
   import { typewriter } from "../lib/TypingEffect";
   // console.log(data);
@@ -9,6 +9,8 @@
   $: console.warn("lines", lines);
   let tags = [] as string[];
   let choices = [] as string[];
+  // let debug: any = {};
+  let debug = "";
   // let onDone = [] as (() => void)[]
 
   interface TagAction {
@@ -16,7 +18,7 @@
     after?: boolean;
   }
   const tagActions: { [key: string]: TagAction } = {
-    delay: {
+    delay2: {
       action: () => {
         log("delay push");
         const p = new Promise<void>((resolve, reject) => {
@@ -28,7 +30,7 @@
       },
       after: true,
     },
-    clear: {
+    clear2: {
       action: async () => {
         lines = [];
       },
@@ -39,20 +41,22 @@
     console.log(...text);
   }
 
+  let compiler = new Compiler(data, new CompilerOptions(undefined,undefined,undefined,(m, t) => {
+    console.log(m);
+  }));
+  
   const story =
     // import.meta.env.DEV ?
-    new Compiler(data, {
-      errorHandler: (m, t) => {
-        console.log(m);
-      },
-    }).Compile();
+    compiler.Compile();
 
+    
   story.onError = (m, t) => {
     console.log(m);
   };
-  story.BindExternalFunction("clear", (text: string) => {
-    console.log(text);
-  });
+  story.BindExternalFunction("clear", () => {
+    console.log("CLEAR |||||", lines);
+        lines = [];
+  }, false);
 
   async function execTags(tags: string[] | null) {
     if (!tags) return;
@@ -80,10 +84,13 @@
   async function poll() {
     // const newLines = [];
     while (story.canContinue) {
+      // debug = story.path.toString() ;
+      debug = JSON.stringify(story.state.callStack.callStackTrace);
       if (story.currentTags!.length > 0)
         await execTags(story.currentTags);
       const line = story.Continue();
-      log("poll", story.currentTags, line);
+      // debug = story.path.toString();
+      log("poll", line);
       if (!line) break;
 
       tags = story.currentTags || [];
@@ -96,7 +103,7 @@
 
       // if(!execTags(story.currentTags))
       // execTags(story.currentTags);
-      return;
+      break;
 
       // break to let the typewriter effect kick in
       // break;
@@ -112,6 +119,7 @@
 
   function handleChoice(choice: number) {
     const choiceObj = story.currentChoices[choice];
+    debug = choiceObj.targetPath?.toString() + " | " + choiceObj.sourcePath.toString();
     choices = [];
     log("handleChoice", choice, choiceObj.tags);
 
@@ -171,6 +179,9 @@
               <span>#{tag}</span>
             {/each}
           </div> -->
+        </div>
+        <div class="debug-overlay">
+          {JSON.stringify(debug)}
         </div>
         <!-- </Typewriter> -->
         <button id="toggleFullscreen" on:click={toggleFullScreen}>f</button>
