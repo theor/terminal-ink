@@ -1,14 +1,14 @@
 <script lang="ts">
   import data from "../assets/story.ink?raw";
   import { Story, Compiler } from "inkjs/full";
-  import Typewriter from "svelte-typewriter";
-import { foo } from "../lib/TypingEffect";
+  // import Typewriter from "svelte-typewriter";
+import { typewriter } from "../lib/TypingEffect";
   // console.log(data);
 
   let lines = [] as string[];
   let tags = [] as string[];
   let choices = [] as string[];
-  let onDone = [] as (() => void)[]
+  // let onDone = [] as (() => void)[]
 
   interface TagAction {
     action: () => void;
@@ -17,9 +17,11 @@ import { foo } from "../lib/TypingEffect";
   const tagActions: { [key: string]: TagAction } = {
     clear: {
       action: () => {
-        onDone.push(() => {
-          lines = [];
-        });
+        log("clear push");
+        lines = [];
+        // onDone.push(() => {
+          // lines = [];
+        // });
       },
       after: true,
     },
@@ -54,13 +56,15 @@ import { foo } from "../lib/TypingEffect";
         action.action();
       }
     });
+    log("execTags", tags, res);
     return res;
   }
 
   function onDoneCallback() {
-    if(onDone.length == 0) return;
-    onDone.forEach((fn) => fn());
-    onDone = [];
+    // console.log("onDone", onDone.length);
+    // if(onDone.length == 0) return;
+    // onDone.forEach((fn) => fn());
+    // onDone = [];
     poll();
 
   }
@@ -68,19 +72,22 @@ import { foo } from "../lib/TypingEffect";
     // const newLines = [];
     while (story.canContinue) {
       log("poll", story.currentTags, story.currentFlowName);
-      if (story.currentTags!.length > 0) console.warn(story.currentTags);
-      // execTags(story.currentTags);
+      if (story.currentTags!.length > 0) 
+      execTags(story.currentTags);
       const line = story.Continue();
       if (!line) break;
 
       tags = story.currentTags || [];
-      if (story.currentTags!.length > 0) console.log(story.currentTags);
+      if (story.currentTags!.length > 0) 
+      execTags(story.currentTags);
 
 
       lines = [...lines, line];
+      return;
 
-      if(!execTags(story.currentTags))
-      break;
+      // if(!execTags(story.currentTags))
+      // execTags(story.currentTags);
+      // break;
 
       // break to let the typewriter effect kick in
       // break;
@@ -127,11 +134,11 @@ import { foo } from "../lib/TypingEffect";
     <div id="screen">
       <div id="crt">
         <div class="scanline"></div>
-        <Typewriter mode="cascade" interval={5} on:done={onDoneCallback} >
+        <!-- <Typewriter mode="cascade" interval={5} on:done={onDoneCallback} > -->
           <div class="terminal">
             {#each lines as line}
 
-            <p>{line}</p>
+            <p  use:typewriter={{line, duration: 40}}  on:done={onDoneCallback}>{line}</p>
           {/each}
         <ol>
             {#each choices as choice, choiceIndex}
@@ -141,19 +148,19 @@ import { foo } from "../lib/TypingEffect";
                   role="button"
                   tabindex={choiceIndex}
                   on:keydown={onKeyDown(choiceIndex)}
-                  on:click={() => handleChoice(choiceIndex)}>{choice}</a
+                  on:click={() => handleChoice(choiceIndex)}>{choiceIndex} {choice}</a
                 >
               </li>
             {/each}
           </ol>
 
-          <div class="tags">
+          <!-- <div class="tags">
             {#each tags as tag}
               <span>#{tag}</span>
             {/each}
-          </div>
+          </div> -->
         </div>
-      </Typewriter>
+      <!-- </Typewriter> -->
       <button id="toggleFullscreen" on:click={toggleFullScreen}>f</button>
         <button id="reload" on:click={() => location.reload()}>r</button>
       </div>

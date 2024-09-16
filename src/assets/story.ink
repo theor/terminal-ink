@@ -1,4 +1,6 @@
 -> start
+TRAC PC-9800 Series System Terminal
+Reythorne OS Version 6.20
 Copyright (C) 2981, 2987 Reythorne Corp. / TRAC Corporation
 
 EEEE I3000000032940xf100110303B77500EEEE I400000004294_M8_BL1_10221D113B323EEEE5
@@ -15,10 +17,8 @@ TE : 512897
  
 System Started                  
 === start ===
-TRAC PC-9800 Series System Terminal
-Reythorne OS Version 6.20
-                    
-
+   TRAC PC-9800                 
+Reythorne OS
 -> main
 
 = main
