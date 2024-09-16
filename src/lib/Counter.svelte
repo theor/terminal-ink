@@ -1,17 +1,13 @@
 <script lang="ts">
   import data from "../assets/story.ink?raw";
   import { Story, Compiler, CompilerOptions } from "inkjs/full";
-  // import Typewriter from "svelte-typewriter";
   import { typewriter } from "../lib/TypingEffect";
-  // console.log(data);
 
   let lines = [] as string[];
   $: console.warn("lines", lines);
   let tags = [] as string[];
   let choices = [] as string[];
-  // let debug: any = {};
   let debug = "";
-  // let onDone = [] as (() => void)[]
 
   interface TagAction {
     action: () => Promise<void>;
@@ -46,7 +42,6 @@
   }));
   
   const story =
-    // import.meta.env.DEV ?
     compiler.Compile();
 
     
@@ -76,20 +71,14 @@
 
   function onDoneCallback() {
     console.log("onDone");
-    // if(onDone.length == 0) return;
-    // onDone.forEach((fn) => fn());
-    // onDone = [];
     poll();
   }
   async function poll() {
-    // const newLines = [];
     while (story.canContinue) {
-      // debug = story.path.toString() ;
       debug = JSON.stringify(story.state.callStack.callStackTrace);
       if (story.currentTags!.length > 0)
         await execTags(story.currentTags);
       const line = story.Continue();
-      // debug = story.path.toString();
       log("poll", line);
       if (!line) break;
 
@@ -98,22 +87,11 @@
       
       log("new lines", lines, line);
       lines = [...lines, line];
-
-      // return;
-
-      // if(!execTags(story.currentTags))
-      // execTags(story.currentTags);
       break;
-
-      // break to let the typewriter effect kick in
-      // break;
     }
 
-    // lines = [...lines, ...newLines];
     choices = story.currentChoices.map((c) => c.text);
     if (story.currentChoices.length > 0) {
-      // log("choices", ...story.currentChoices);
-      // console.log(story.currentChoices);
     }
   }
 
@@ -122,8 +100,6 @@
     debug = choiceObj.targetPath?.toString() + " | " + choiceObj.sourcePath.toString();
     choices = [];
     log("handleChoice", choice, choiceObj.tags);
-
-    // execTags(choiceObj.tags);
     story.ChooseChoiceIndex(choice);
 
     poll();
@@ -152,7 +128,6 @@
     <div id="screen">
       <div id="crt">
         <div class="scanline"></div>
-        <!-- <Typewriter mode="cascade" interval={5} on:done={onDoneCallback} > -->
         <div class="terminal">
           {#each lines as line}
             <p use:typewriter={{ line, duration: 20 }} on:done={onDoneCallback}>
@@ -174,16 +149,11 @@
             {/each}
           </ol>
 
-          <!-- <div class="tags">
-            {#each tags as tag}
-              <span>#{tag}</span>
-            {/each}
-          </div> -->
+        
         </div>
         <div class="debug-overlay">
           {JSON.stringify(debug)}
         </div>
-        <!-- </Typewriter> -->
         <button id="toggleFullscreen" on:click={toggleFullScreen}>f</button>
         <button id="reload" on:click={() => location.reload()}>r</button>
       </div>
