@@ -19,6 +19,7 @@
     "vite": "^5.4.1"
   },
   "dependencies": {
-    "inkjs": "^2.3.0"
+    "inkjs": "^2.3.0",
+    "svelte-typewriter": "^3.2.3"
   }
 }
