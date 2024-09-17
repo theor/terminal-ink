@@ -2,6 +2,8 @@
 
 A fake terminal for TTRPGs, scripted with Inkle's [Ink language](https://github.com/inkle/ink). I use it to run [Mothership](https://www.tuesdayknightgames.com/pages/mothership-rpg) sessions.
 
+Demo: https://terminal-ink.netlify.app/#/
+
 # Usage
 
 The most flexible option is to run a dev server on a machine, then access it from adevice on the game table (iPad, phone, ...). It allows to update the content live.
