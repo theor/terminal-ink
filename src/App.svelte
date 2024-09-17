@@ -1,12 +1,12 @@
 <script lang="ts">
-  import Counter from './lib/Counter.svelte'
+  import InkTerminal from './lib/InkTerminal.svelte'
 </script>
 
 <main>
  
 
   <div class="card">
-    <Counter />
+    <InkTerminal />
   </div>
 </main>
 

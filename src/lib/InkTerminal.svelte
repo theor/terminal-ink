@@ -1,7 +1,7 @@
 <script lang="ts">
   import data from "../assets/story.ink?raw";
   import { Story, Compiler, CompilerOptions } from "inkjs/full";
-  import { typewriter } from "../lib/TypingEffect";
+  import { typewriter } from "./TypingEffect";
 
   enum LineType {
     Text,

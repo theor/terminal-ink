@@ -1,5 +1,5 @@
-EXTERNAL clear()
 -> boot
+
 = boot
 #speed 5
 TRAC PC-9800 Series System Terminal
@@ -18,11 +18,12 @@ ucl decompress...pass
 Boot from internal device 1st SPI                                               
  
 TE : 512897    
--> start                                                                 
+-> start        
+
 = start
 System Started                  
 #speed 40
-......................... #asd 32
+.........................
 #delay 100
 #speed 40
 ENTER PASSWORD
@@ -30,8 +31,8 @@ ENTER PASSWORD
 -> main
 
 = main
-#clear  #title
-Greta base
+#clear
+Greta base  #title
 + Diagnostic
   -> diagnostics ->
 + Controls
@@ -46,10 +47,12 @@ Greta base
 Generator [off]
 backup generator [off]
 + [back] ->->
+
 = controls
 Airlock [closed]
  #delay
 ->->
+
 = comms
 Comms [off]
  #delay
