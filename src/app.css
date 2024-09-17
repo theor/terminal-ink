@@ -232,8 +232,8 @@ pre {
 #crt {
 	min-width: 80ch; /* This makes 80 monospace characters fit on the screen */
 	height: 100%; /*  calc(80ch * 0.8); */
-	font-size: min(
-		8vh,
+	font-size: max(
+		3vh,
 		8.2vmin
 	); /* Scale the font-size relative to the minimum screen dimension */
 	position: relative;

@@ -1,7 +1,7 @@
 EXTERNAL clear()
--> start
+-> boot
 = boot
-#speed 1
+#speed 5
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
 Copyright (C) 2981, 2987 Reythorne Corp. / TRAC Corporation
@@ -21,7 +21,7 @@ TE : 512897
 -> start                                                                 
 = start
 System Started                  
-#speed 20
+#speed 40
 ......................... #asd 32
 #delay 100
 #speed 40
