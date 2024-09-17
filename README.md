@@ -10,6 +10,12 @@ that instead.
 
 Demo: https://terminal-ink.netlify.app/#/
 
+
+
+https://github.com/user-attachments/assets/8a5d774f-929a-469a-a3ba-9eb2cf37c7f7
+
+
+
 # Usage
 
 The most flexible option is to run a dev server on a machine, then access it from
