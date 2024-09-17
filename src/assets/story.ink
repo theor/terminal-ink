@@ -20,14 +20,15 @@ System Started
 === start ===
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
+.........................
 -> main
 
 = main
 ~ clear()
-> INPUT
-
+\/\/ Greta base \/\/ #title
 +	Diagnostics
 	asd
+	qwe
 	+ + [Nice to hear from you!]
 	    -> main
 	+ + [back] -> main
@@ -37,5 +38,4 @@ Reythorne OS Version 6.20
 +   Comms
 	Comms OFF
 	+ + [back] -> main
-	
 -> main

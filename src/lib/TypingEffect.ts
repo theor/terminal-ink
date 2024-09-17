@@ -10,7 +10,7 @@ export const typewriter: Action<
   let index = 0;
 
   let start = -1;
-  console.log("> start", line);
+//   console.log("> start", line);
   node.textContent = "";
 
   const tick = (time: DOMHighResTimeStamp) => {
@@ -29,7 +29,7 @@ export const typewriter: Action<
         requestAnimationFrame(tick);
         index += 1;
       } else {
-        console.log("> done", line);
+        // console.log("> done", line);
         node.dispatchEvent(new CustomEvent("done"));
       }
     } else {
@@ -41,7 +41,7 @@ export const typewriter: Action<
     update(newLine) {
         if(newLine.line === line) {
             console.error("SKIP", line)
-            node.dispatchEvent(new CustomEvent("done"));
+            // node.dispatchEvent(new CustomEvent("done"));
             
             return;}
         console.error("> update TYPEWRITER", line, newLine);
