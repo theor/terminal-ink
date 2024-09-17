@@ -231,10 +231,10 @@ pre {
 }
 #crt {
 	min-width: 80ch; /* This makes 80 monospace characters fit on the screen */
-	height: calc(80ch * 0.8);
-	font-size: max(
-		1rem,
-		2.2vmin
+	height: 100%; /*  calc(80ch * 0.8); */
+	font-size: min(
+		8vh,
+		8.2vmin
 	); /* Scale the font-size relative to the minimum screen dimension */
 	position: relative;
 	background: var(--bg);
@@ -282,11 +282,13 @@ pre {
 	animation: fadeIn 2s;
 }
 .fullscreen #crt {
-	font-size: 2.5rem;
+	/* font-size: 2.5rem; */
 	position: fixed;
 	width: 100%;
 	left: 0;
 	top: 0;
+  right: 0;
+  bottom: 0;
 	z-index: 999;
 }
 
@@ -389,6 +391,53 @@ pre {
   background-color: var(--color);
   width: 1rem;
   height: 1rem;
+}
+
+a:focus:before {
+  content: "[";
+}
+
+a:focus:after {
+  content: "]";
+}
+
+.prompt {
+  flex-shrink: 1;
+  /* flex-grow: 1; */
+  /* min-width: 0; */
+  display: inline-block;
+  background-color: transparent;
+  border: none;
+  color: var(--color);
+	text-transform: uppercase;
+  /* height: 100%; */
+	font-size: inherit;
+  animation: textShadow 1.6s infinite;
+  font-family: "VT323", monospace;
+  
+field-sizing: content;
+}
+.prompt:focus {
+  outline: none;
+}
+.prompt {
+  caret-color: transparent;
+  display: flex;
+}
+.prompt:before {
+  content: "> ";
+}
+.prompt:focus::after {
+  display: inline-block;
+  width: 1em;
+  content: " ";
+  height: 1em;
+  background-color: var(--color);
+animation: cursor 1s infinite;
+}
+
+.terminal li {
+  margin-left: 4rem;
 }
 
 @keyframes flicker {

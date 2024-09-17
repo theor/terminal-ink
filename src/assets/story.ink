@@ -1,5 +1,7 @@
 EXTERNAL clear()
 -> start
+= boot
+#speed 1
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
 Copyright (C) 2981, 2987 Reythorne Corp. / TRAC Corporation
@@ -9,19 +11,22 @@ no sdio debug board detected
 TE : 102609
 BT : 11:30:18 Mar 14 2314
                               
-Boot From SPI                                                                   
+Boot From SPI      
+#clear                                                             
 ucl decompress...pass                                                           
 0x12345678                                                                      
 Boot from internal device 1st SPI                                               
  
-TE : 512897                                                                     
- 
+TE : 512897    
+-> start                                                                 
+= start
 System Started                  
-=== start ===
-TRAC PC-9800 Series System Terminal
-Reythorne OS Version 6.20
+#speed 20
 ......................... #asd 32
-#delay
+#delay 100
+#speed 40
+ENTER PASSWORD
+#password 123
 -> main
 
 = main
@@ -33,6 +38,8 @@ Greta base
   -> controls ->
 + Comms
   -> comms ->
++ Reboot
+  -> boot
 - -> main
 
 = diagnostics
