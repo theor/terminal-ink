@@ -39,7 +39,11 @@ export const typewriter: Action<
   requestAnimationFrame(tick);
   return {
     update(newLine) {
-        if(newLine.line === line) return;
+        if(newLine.line === line) {
+            console.error("SKIP", line)
+            node.dispatchEvent(new CustomEvent("done"));
+            
+            return;}
         console.error("> update TYPEWRITER", line, newLine);
         node.textContent = "";
         line = newLine.line;

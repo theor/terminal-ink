@@ -35,4 +35,7 @@ Reythorne OS Version 6.20
 	Airlock: Opened
 	+ + [back] -> main
 +   Comms
+	Comms OFF
+	+ + [back] -> main
+	
 -> main

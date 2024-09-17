@@ -43,13 +43,14 @@
   
   const story =
     compiler.Compile();
+    window.story = story;
 
     
   story.onError = (m, t) => {
     console.log(m);
   };
   story.BindExternalFunction("clear", () => {
-    console.log("CLEAR |||||", lines);
+    console.warn("CLEAR |||||", lines);
         lines = [];
   }, false);
 
@@ -79,7 +80,7 @@
       if (story.currentTags!.length > 0)
         await execTags(story.currentTags);
       const line = story.Continue();
-      log("poll", line);
+      console.trace("poll", line);
       if (!line) break;
 
       tags = story.currentTags || [];
