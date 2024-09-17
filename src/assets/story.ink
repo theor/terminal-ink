@@ -20,22 +20,30 @@ System Started
 === start ===
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
-.........................
+......................... #asd 32
+#delay
 -> main
 
 = main
-~ clear()
-\/\/ Greta base \/\/ #title
-+	Diagnostics
-	asd
-	qwe
-	+ + [Nice to hear from you!]
-	    -> main
-	+ + [back] -> main
-+	Controls
-	Airlock: Opened
-	+ + [back] -> main
-+   Comms
-	Comms OFF
-	+ + [back] -> main
--> main
+#clear  #title
+Greta base
++ Diagnostic
+  -> diagnostics ->
++ Controls
+  -> controls ->
++ Comms
+  -> comms ->
+- -> main
+
+= diagnostics
+Generator [off]
+backup generator [off]
++ [back] ->->
+= controls
+Airlock [closed]
+ #delay
+->->
+= comms
+Comms [off]
+ #delay
+->->

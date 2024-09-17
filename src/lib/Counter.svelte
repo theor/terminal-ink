@@ -18,64 +18,68 @@
   let debug = "";
 
   interface TagAction {
-    action: (line:Line) => Promise<Line>;
+    action: (line: Line) => Promise<Line>;
   }
   const tagActions: { [key: string]: TagAction } = {
     title: {
       action: async (line) => {
-        return {text: line.text, type: LineType.Title};
+        return { text: `// ${line.text} //`, type: LineType.Title };
       },
     },
-    delay2: {
+    delay: {
       action: (line) => {
-        log("delay push");
+        log("delay push", line.text);
         const p = new Promise<Line>((resolve, reject) => {
           setTimeout(() => {
             resolve(line);
-          }, 500);
+          }, 1500);
         });
         return p;
-      }
+      },
     },
-    clear2: {
+    clear: {
       action: async (line) => {
         lines = [];
         return line;
-      }
+      },
     },
   };
   function log(...text: any[]) {
     console.log(...text);
   }
 
-  let compiler = new Compiler(data, new CompilerOptions(undefined,undefined,undefined,(m, t) => {
-    console.log(m);
-  }));
-  
-  const story =
-    compiler.Compile();
-    (window as any).story = story;
+  let compiler = new Compiler(
+    data,
+    new CompilerOptions(undefined, undefined, undefined, (m, t) => {
+      console.log(m);
+    })
+  );
 
-    
+  const story = compiler.Compile();
+  (window as any).story = story;
+
   story.onError = (m, t) => {
     console.log(m);
   };
-  story.BindExternalFunction("clear", () => {
-    console.warn("CLEAR |||||", lines);
-        lines = [];
-  }, false);
+  story.BindExternalFunction(
+    "clear",
+    () => {
+      console.warn("CLEAR |||||", lines);
+      lines = [];
+    },
+    false
+  );
 
   async function execTags(tags: string[] | null, line: Line): Promise<Line> {
     if (!tags) return line;
-    // console.log("execTags", tags, story.currentText);
+    console.log("execTags", tags, story.currentText);
     for (const iterator of tags) {
       const action = tagActions[iterator];
       if (action) {
         line = await action.action(line);
       }
-      
     }
-  
+
     return line;
   }
 
@@ -87,16 +91,20 @@
     while (story.canContinue) {
       debug = JSON.stringify(story.state.callStack.callStackTrace);
       // if (story.currentTags!.length > 0)
-        // await execTags(story.currentTags, null!);
-      let line: Line = {text: story.Continue()!, type: LineType.Text};
-      console.log(`poll: '${line}'`);
+      // await execTags(story.currentTags, null!);
+      let line: Line = { text: story.Continue()!, type: LineType.Text };
+      console.log(`poll: '${line.text}'`);
+
       if (!line.text) break;
-if(line.text === "\n") { continue; }
+      if (line.text === "\n") {
+        line = await execTags(story.currentTags, line);
+        continue;
+      }
 
       tags = story.currentTags || [];
       if (story.currentTags!.length > 0)
-         line = await  execTags(story.currentTags, line);
-      
+        line = await execTags(story.currentTags, line);
+
       // log("new lines", lines, line);
       lines = [...lines, line];
       return;
@@ -109,7 +117,10 @@ if(line.text === "\n") { continue; }
 
   function handleChoice(choice: number) {
     const choiceObj = story.currentChoices[choice];
-    debug = choiceObj.targetPath?.toString() + " | " + choiceObj.sourcePath.toString();
+    debug =
+      choiceObj.targetPath?.toString() +
+      " | " +
+      choiceObj.sourcePath.toString();
     choices = [];
     log("handleChoice", choice, choiceObj.tags);
     story.ChooseChoiceIndex(choice);
@@ -141,24 +152,33 @@ if(line.text === "\n") { continue; }
       <div id="crt">
         <div class="scanline"></div>
         <div class="terminal">
+          <p>```</p>
           {#each lines as line}
-          {#if line.type === LineType.Title}
-            <h1 use:typewriter={{ line:line.text, duration: 20 }} on:done={onDoneCallback}>
-              {line}
-            </h1>
-          {:else}
-            <p use:typewriter={{ line:line.text, duration: 20 }} on:done={onDoneCallback}>
-              {line}
-            </p>
-          {/if}
+            {#if line.type === LineType.Title}
+              <h1
+                use:typewriter={{ line: line.text, duration: 20 }}
+                on:done={onDoneCallback}
+              >
+                {line}
+              </h1>
+            {:else}
+              <p
+                use:typewriter={{ line: line.text, duration: 20 }}
+                on:done={onDoneCallback}
+              >
+                {line}
+              </p>
+            {/if}
           {/each}
           <ol>
             {#each choices as choice, choiceIndex}
               <li>
-                <a use:typewriter={{ line:choice, duration: 40 }}
+                <a
+                  use:typewriter={{ line: choice, duration: 20 }}
                   href="#/"
                   role="button"
                   tabindex={choiceIndex}
+                  
                   on:keydown={onKeyDown(choiceIndex)}
                   on:click={() => handleChoice(choiceIndex)}
                   >{choiceIndex} {choice}</a
@@ -166,11 +186,10 @@ if(line.text === "\n") { continue; }
               </li>
             {/each}
           </ol>
-
-        
+          
         </div>
         <div class="debug-overlay">
-          {JSON.stringify(debug)}
+          <!-- {JSON.stringify(debug)} -->
         </div>
         <button id="toggleFullscreen" on:click={toggleFullScreen}>f</button>
         <button id="reload" on:click={() => location.reload()}>r</button>

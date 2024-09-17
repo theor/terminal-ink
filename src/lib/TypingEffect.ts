@@ -12,6 +12,7 @@ export const typewriter: Action<
   let start = -1;
 //   console.log("> start", line);
   node.textContent = "";
+  node.classList.add("typewriter");
 
   const tick = (time: DOMHighResTimeStamp) => {
     if (start < 0) {
@@ -30,6 +31,7 @@ export const typewriter: Action<
         index += 1;
       } else {
         // console.log("> done", line);
+  node.classList.remove("typewriter");
         node.dispatchEvent(new CustomEvent("done"));
       }
     } else {
@@ -40,6 +42,7 @@ export const typewriter: Action<
   return {
     update(newLine) {
         if(newLine.line === line) {
+            node.classList.remove("typewriter");
             console.error("SKIP", line)
             // node.dispatchEvent(new CustomEvent("done"));
             
@@ -59,49 +62,3 @@ export const typewriter: Action<
     // }
   };
 };
-export function typewriter2(
-  node: HTMLElement,
-  lines: string[]
-): Action<HTMLElement, string[], { "on:done": () => void }> {
-  // the node has been mounted in the DOM
-  console.log("start", ...lines);
-
-  const res = {
-    update(newLines: string[]) {
-      let i = 0;
-      for (; i < lines.length; i++) {
-        if (lines[i] !== newLines[i]) {
-          break;
-        }
-      }
-      const delta =
-        i === lines.length ? [...newLines.slice(lines.length)] : [...newLines];
-
-      console.log("update", ...delta);
-
-      let start = -1;
-      const tick = (time: DOMHighResTimeStamp) => {
-        if (start < 0) {
-          start = time;
-        }
-
-        const deltaTime = time - start;
-        if (deltaTime < 400) {
-          requestAnimationFrame(tick);
-        } else {
-          console.log("tick", deltaTime);
-          node.dispatchEvent(new CustomEvent("done"));
-        }
-      };
-      requestAnimationFrame(tick);
-
-      // the value of `bar` has changed
-    },
-
-    destroy() {
-      // the node has been removed from the DOM
-    },
-  };
-  res.update(lines);
-  return res;
-}
