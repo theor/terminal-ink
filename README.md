@@ -8,6 +8,8 @@ stories -- branching prose that moves forward -- whereas a terminal is a set of
 screens you navigate, redraw, and come back to. The format here is built around
 that instead.
 
+Demo: https://terminal-ink.netlify.app/#/
+
 # Usage
 
 The most flexible option is to run a dev server on a machine, then access it from
