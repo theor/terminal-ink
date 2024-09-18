@@ -26,7 +26,7 @@ System Started
 .........................
 #delay 100
 #speed 40
-ENTER PASSWORD
+ENTER PASSWORD (123)
 #password 123
 -> main
 
