@@ -14,7 +14,7 @@
   let lines = [] as Line[];
   $: console.warn("lines", lines);
   let tags = [] as string[];
-  let choices = [] as string[];
+  let choices = ["BOOT"] as string[];
   let debug = "";
   let speed = 5;
   let awaitInputPromise: ((input: string) => void) | null = null;
@@ -159,6 +159,13 @@
 
   function handleChoice(choice: number) {
     const choiceObj = story.currentChoices[choice];
+    // boot button
+    if(!choiceObj)
+    {
+      choices = [];
+      poll();
+      return;
+    }
     // debug =
     //   choiceObj.targetPath?.toString() +
     //   " | " +
@@ -186,7 +193,7 @@
     };
   }
 
-  if (lines.length === 0) poll();
+  // if (lines.length === 0) poll();
 
   function toggleFullScreen() {
     if (!document.fullscreenElement) {
@@ -258,9 +265,7 @@
         <div class="debug-overlay">
           <!-- {JSON.stringify(debug)} -->
         </div>
-        {#if !isFullscreen}
           <button id="toggleFullscreen" on:click={toggleFullScreen}>f</button>
-        {/if}
         <!-- <button id="reload" on:click={() => location.reload()}>r</button> -->
       </div>
     </div>

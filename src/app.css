@@ -1,169 +1,5 @@
 @import url("https://fonts.googleapis.com/css?family=VT323&display=swap");
 @import url("animations.css");
-/* body {
-  margin: 0;
-}
-:root {
-  --ambience: rgb(204, 0, 0);
-  --reflection: rgb(204, 0, 0, 0.1);
-  --screen-height: 100vh;
-  --screen-width: 100vw;
-  --screen-backlight: #0d800090;
-  --font-size: 22px;
-  --font-color: #a3ff99;
-  --font-shadow: #5dff4b;
-}
-
-.glass {
-  position: relative;
-  background: linear-gradient(
-    -45deg,
-    rgba(0, 0, 0, 0.15),
-    var(--reflection) 90%
-  );
-  box-shadow: inset 7px 7px 14px 10px #000000,
-    inset -7px -7px 14px var(--ambience);
-  border-radius: 50px;
-  height: inherit;
-  width: inherit;
-  z-index: 10000;
-}
-.wrapper {
-  border-radius: 50px;
-  width: var(--screen-width);
-  height: var(--screen-height);
-  z-index: -1;
-}
-
-.greentheme {
-  color: var(--font-color);
-  text-shadow: 0px 0px var(--font-size) var(--font-shadow);
-  font-family: Glass, VT323, monospace;
-  font-size: var(--font-size);
-  line-height: 25px;
-  animation: textShadow 1.6s infinite;
-  background: radial-gradient(var(--screen-backlight), #000000);
-}
-
-.greentheme a,
-.greentheme a:hover,
-.greentheme a:active {
-  color: var(--font-color);
-  text-shadow: 0px 0px var(--font-size) var(--font-shadow);
-  text-decoration: underline;
-  animation: textShadow 1.6s infinite;
-}
-
-.orangetheme {
-  color: #ffcc00;
-  text-shadow: 0px 0px var(--font-size) #ffb000;
-  font-family: Glass, VT323, monospace;
-  font-size: var(--font-size);
-  line-height: 25px;
-  animation: textShadow 1.6s infinite;
-  background: radial-gradient(#80530090, #000000);
-}
-
-.screen {
-  border-radius: 50px;
-  display: flex;
-  height: var(--screen-height);
-  overflow: scroll;
-  flex-direction: column;
-  z-index: 1;
-}
-
-.screen > * {
-  padding: 50px;
-}
-
-.screen.invert {
-  flex-direction: column-reverse;
-}
-
-.screen::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.screen::after {
-  content: " ";
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  border-radius: 50px;
-  background: rgba(18, 16, 16, 0.1);
-  opacity: 0;
-  z-index: 3;
-  animation: flicker 0.1s infinite;
-  padding: 50px;
-  position: fixed;
-  display: block;
-  right: 0;
-  bottom: -5px;
-  left: 0;
-  margin: auto;
-  pointer-events: none;
-}
-
-.screen::before {
-  content: " ";
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  border-radius: 50px;
-  background: linear-gradient(to top, #000000, #000000, #33333300, #33333300);
-  z-index: 3;
-  background-size: 100% 2px, 3px 10%;
-  padding: 50px;
-  position: fixed;
-  display: block;
-  right: 0;
-  bottom: -5px;
-  left: 0;
-  margin: auto;
-  pointer-events: none;
-} */
-
-/* 
-body {
-  background-color: black;
-  background-image: radial-gradient(
-    #649b5977, black 120%
-  );
-  height: 100vh;
-  margin: 0;
-  overflow: hidden;
-  padding: 2rem;
-  color: #ccc;
-  font: 1.3rem Inconsolata, monospace;
-  text-shadow: 0 0 5px #C8C8C8;
-  &::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-  background: linear-gradient(
-    -45deg,
-    rgba(0, 0, 0, 0.15),
-    var(--reflection) 90%
-  );
-    pointer-events: none;
-  }
-}
-::selection {
-  background: #0080FF;
-  text-shadow: none;
-}
-pre {
-  margin: 0;
-} */
-
-/* .tags {
-  font-size: smaller;
-} */
 
 :root {
 	--green-color: #5bf870;
@@ -296,6 +132,15 @@ pre {
   position: fixed;
   top: 1rem;
   right: 1rem;
+  width: 2rem;
+  border: none;
+  background-color: transparent;
+  color: transparent;
+  /* visibility: hidden; */
+}
+#toggleFullscreen:hover {
+  /* visibility: visible; */
+  color: var(--green-color);
 }
 #reload {
   position: fixed;
