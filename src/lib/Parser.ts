@@ -1,6 +1,7 @@
 import type { MatchResult } from "ohm-js";
 import grammar from "./grammar.ohm-bundle.js";
 import type { TerminalSemantics } from "./grammar.ohm-bundle.js";
+import { positionsOf, tagSpec, type TagPosition } from "./tags.ts";
 
 /** A run of literal text, or a `{variable}` to be substituted at runtime. */
 export type Segment =
@@ -10,12 +11,16 @@ export type Segment =
 /**
  * `#delay 800` -> `{ name: "delay", args: ["800"] }`
  *
- * Assignment is a tag too: `#set generator = on` -> `{ name: "set", args:
- * ["generator", "on"] }`, so a value holding spaces survives as one argument.
+ * A tag written as an assignment -- `#set generator = on` -> `{ name: "set",
+ * pair: true, args: ["generator", "on"] }` -- keeps a value holding spaces as
+ * one argument. The parser records which of the two shapes was written and
+ * leaves it to `tags.ts` to say whether that was the right one.
  */
 export interface Tag {
   name: string;
   args: string[];
+  /** Set only when the tag was written as `#name lhs = rhs`. */
+  pair?: true;
 }
 
 interface NodeBase {
@@ -178,12 +183,13 @@ semantics.addOperation<any>("parse", {
   tagItem(t) {
     return t.parse();
   },
-  setTag(_hash, _h1, name, _h2, _eq, _h3, value) {
+  pairTag(_hash, name, _h1, lhs, _h2, _eq, _h3, value) {
     // Two arguments, always -- the value keeps its spaces instead of being
     // split into tokens the way an ordinary tag's arguments are.
     return {
-      name: "set",
-      args: [name.sourceString, unescape(value.sourceString.trim())],
+      name: name.sourceString,
+      pair: true,
+      args: [lhs.sourceString, unescape(value.sourceString.trim())],
     };
   },
   tag(_hash, name, args, _hs) {
@@ -342,15 +348,15 @@ export function parse(source: string): Story {
 }
 
 /**
- * Reports diverts pointing at a block which does not exist, and `#set` tags
- * that are not assignments. The grammar rejects most malformed `#set`s
- * outright; what reaches here is `#set` with nothing after it, which would
- * otherwise sit in the output as an inert unknown tag and do nothing quietly.
+ * Reports diverts pointing at a block which does not exist, and tags that do
+ * not match what `tags.ts` says they should look like. The grammar accepts any
+ * tag in either shape, so everything specific to a tag is checked here -- a
+ * tag that means something must never sit in the output doing nothing quietly.
  */
 function validate(story: Story) {
   const walk = (nodes: Node[]) => {
     for (const node of nodes) {
-      checkTags(node.tags, node.line);
+      checkTags(node.tags, node.line, positionOf(node));
       if (node.kind === "divert") checkTarget(node.target, node.line);
       if (node.kind === "choice") {
         if (node.divert) checkTarget(node.divert, node.line);
@@ -366,20 +372,58 @@ function validate(story: Story) {
       message: `Unknown block "${target}"`,
     });
   };
-  const checkTags = (tags: Tag[], line: number) => {
+  const fail = (line: number, message: string) =>
+    story.errors.push({ line, column: 0, message });
+
+  const checkTags = (tags: Tag[], line: number, position: TagPosition) => {
     for (const tag of tags) {
-      if (tag.name === "set" && tag.args.length !== 2) {
-        story.errors.push({
-          line,
-          column: 0,
-          message: "#set needs a name and a value, as `#set name = value`",
-        });
+      const spec = tagSpec(tag.name);
+      // A tag nothing consumes is inert by design -- only a tag that means
+      // something can be written wrongly.
+      if (!spec) continue;
+
+      const written = tag.pair ? "pair" : "args";
+      if (written !== spec.shape) {
+        fail(line, `#${tag.name} is written as \`${spec.syntax}\``);
+        continue;
+      }
+      if (spec.shape === "args" && spec.arity) {
+        const [min, max] = spec.arity;
+        if (tag.args.length < min || tag.args.length > max) {
+          fail(line, `#${tag.name} is written as \`${spec.syntax}\``);
+          continue;
+        }
+      }
+      if (!positionsOf(spec).includes(position)) {
+        fail(line, `#${tag.name} does nothing ${WHERE[position]}`);
       }
     }
   };
   for (const block of story.blocks) {
-    checkTags(block.tags, block.line);
+    checkTags(block.tags, block.line, "header");
     walk(block.children);
+  }
+}
+
+/** Reads back inside "#title does nothing ...". */
+const WHERE: Record<TagPosition, string> = {
+  header: "on a block header",
+  text: "on a line of text",
+  own: "on a line of its own",
+  choice: "on a choice",
+  divert: "on a divert",
+};
+
+function positionOf(node: Node): TagPosition {
+  switch (node.kind) {
+    case "text":
+      return "text";
+    case "directive":
+      return "own";
+    case "choice":
+      return "choice";
+    case "divert":
+      return "divert";
   }
 }
 
@@ -425,9 +469,9 @@ function segmentsToSource(segments: Segment[]): string {
 }
 
 function tagToString(tag: Tag): string {
-  if (tag.name === "set" && tag.args.length === 2) {
-    const [name, value] = tag.args;
-    return `#set ${name} = ${value.replace(/#/g, "\\#")}`;
+  if (tag.pair) {
+    const [lhs, rhs] = tag.args;
+    return `#${tag.name} ${lhs} = ${rhs.replace(/#/g, "\\#")}`;
   }
   return `#${tag.name}${tag.args.map((a) => " " + a).join("")}`;
 }

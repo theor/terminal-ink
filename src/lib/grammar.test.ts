@@ -13,6 +13,13 @@ function ruleOf(line: string): string {
   return (m as any)._cst.children[0].ctorName;
 }
 
+/** Which of the two tag shapes a single-tag line was read as. */
+function ruleOfTag(line: string): string {
+  const m = grammar.match(line, "tagItem");
+  assert.ok(m.succeeded(), `expected ${JSON.stringify(line)} to parse`);
+  return (m as any)._cst.children[0].ctorName;
+}
+
 test("accepts prose with arbitrary punctuation", () => {
   // Every one of these is a real line from the Mothership boot sequence that
   // the previous grammar rejected.
@@ -67,17 +74,22 @@ test("a #set value may hold spaces, and stops at the next tag", () => {
   assert.ok(accepts("#set candle = burning bright #delay 100"));
 });
 
-test("rejects a #set that is not an assignment", () => {
-  // It must not fall back to being an inert unknown tag and do nothing quietly.
-  assert.ok(!accepts("#set generator"), "no value");
-  assert.ok(!accepts("#set generator on"), "no equals sign");
-  assert.ok(!accepts("#set generator = "), "empty value");
-  assert.ok(!accepts("Generator online #set generator"), "trailing on a text line");
+test("the grammar knows the two tag shapes, and no tag names", () => {
+  // Whether a name is real, and which shape it should take, is tags.ts's job
+  // -- so all of these parse here and are reported by the parser instead.
+  assert.ok(accepts("#set generator"), "wrong shape still parses");
+  assert.ok(accepts("#whatever a = b"), "an unknown name may be a pair");
+  assert.ok(accepts("#settings"), "a name merely starting with set");
+  assert.ok(accepts("#setup 3"));
 });
 
-test("#set does not swallow tags that merely start with set", () => {
-  assert.ok(accepts("#settings"));
-  assert.ok(accepts("#setup 3"));
+test("only an assignment-shaped tag is read as a pair", () => {
+  // What separates the shapes: a pair needs an identifier and an `=`.
+  assert.equal(ruleOfTag("#set generator = on"), "pairTag");
+  assert.equal(ruleOfTag("#password sable"), "tag", "no equals sign");
+  assert.equal(ruleOfTag("#speed 40"), "tag", "a number is not an identifier");
+  assert.equal(ruleOfTag("#delay 8=00"), "tag", "nor is the left of that `=`");
+  assert.equal(ruleOfTag("#clear"), "tag");
 });
 
 test("a rule of equals signs is text, not a block header", () => {

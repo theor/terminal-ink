@@ -1,7 +1,9 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { typewriter } from "./TypingEffect.ts";
-  import type { Runner, Output, RunChoice, StepResult } from "./Runner.ts";
+  import type { Runner, RunChoice, StepResult } from "./Runner.ts";
+  import type { Tag } from "./Parser.ts";
+  import { tagSpec, type TerminalUI } from "./tags.ts";
   import { DEFAULT_THEME, themeFor } from "./themes/index.ts";
 
   let {
@@ -64,8 +66,30 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  function tagArg(output: Output, name: string): string | undefined {
-    return output.tags.find((t) => t.name === name)?.args[0];
+  /** Whether the line about to be printed was marked as a heading. */
+  let heading = false;
+
+  /**
+   * What a tag is allowed to do to the display. The tags themselves live in
+   * tags.ts -- this is only the set of levers they can pull, so a new display
+   * tag is an entry there rather than another branch in the loop below.
+   */
+  const ui: TerminalUI = {
+    clear: () => (lines = []),
+    setSpeed: (ms) => (speed = ms),
+    // A theme change is handled here rather than in the runner: it changes how
+    // the story looks, not what it does.
+    setTheme: (name) => (themeName = name),
+    asHeading: () => (heading = true),
+    wait,
+  };
+
+  /** Runs one phase of whatever the tags on a line do to the display. */
+  async function runView(tags: Tag[], phase: "before" | "after") {
+    for (const tag of tags) {
+      const view = tagSpec(tag.name)?.view;
+      if (view?.phase === phase) await view.run(ui, tag.args);
+    }
   }
 
   /** Prints a step's outputs in order, then offers whatever comes next. */
@@ -73,23 +97,17 @@
     for (const output of step.outputs) {
       if (gen !== generation) return;
 
-      // #theme is handled here rather than in the runner: it changes how the
-      // story looks, not what it does.
-      const nextTheme = tagArg(output, "theme");
-      if (nextTheme) themeName = nextTheme;
-
-      const nextSpeed = tagArg(output, "speed");
-      if (nextSpeed) speed = parseInt(nextSpeed);
-      if (output.tags.some((t) => t.name === "clear")) lines = [];
+      heading = false;
+      await runView(output.tags, "before");
+      if (gen !== generation) return;
 
       if (output.text !== null) {
-        const title = output.tags.some((t) => t.name === "title");
         lines = [
           ...lines,
           {
             id: nextId++,
-            text: title ? theme.strings.title(output.text) : output.text,
-            title,
+            text: heading ? theme.strings.title(output.text) : output.text,
+            title: heading,
             speed,
           },
         ];
@@ -97,10 +115,8 @@
         if (gen !== generation) return;
       }
 
-      if (output.tags.some((t) => t.name === "delay")) {
-        await wait(parseInt(tagArg(output, "delay") ?? "1500"));
-        if (gen !== generation) return;
-      }
+      await runView(output.tags, "after");
+      if (gen !== generation) return;
     }
 
     halted = step.halted;

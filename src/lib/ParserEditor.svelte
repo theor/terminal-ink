@@ -7,10 +7,13 @@
   import grimoireSource from "../assets/grimoire.term?raw";
   import { parse, type ParseError } from "./Parser.ts";
   import { Runner } from "./Runner.ts";
+  import { TAGS } from "./tags.ts";
   import Terminal from "./Terminal.svelte";
 
   /** How long to wait after a keystroke before restarting the preview. */
   const RESTART_DELAY = 500;
+
+  const PAIR_TAGS = TAGS.filter((t) => t.shape === "pair").map((t) => t.name);
 
   const STORIES: Record<string, string> = {
     "story.term": storySource,
@@ -98,9 +101,11 @@
             [/^\s*\/\/.*$/, "comment"],
             [/^\s*=\s*\w+/, "keyword"],
             [/^\s*\*/, "keyword"],
-            // Assignment reads as a keyword even though it is spelled as a
-            // tag -- it changes state, the other tags only change the display.
-            [/#set\b/, "keyword"],
+            // A tag written as an assignment reads as a keyword even though it
+            // is spelled as a tag -- it changes state, where the others only
+            // change the display. Built from the registry, so a new one of
+            // them highlights without touching this file.
+            [new RegExp(`#(${PAIR_TAGS.join("|")})\\b`), "keyword"],
             [/->\s*\w*/, "type"],
             [/#\w+/, "annotation"],
             [/\{\s*\w+\s*\}/, "variable"],

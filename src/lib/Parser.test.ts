@@ -130,8 +130,8 @@ test("reads #set as a two-argument tag", () => {
   assert.deepEqual(
     b.children.map((n) => n.tags),
     [
-      [{ name: "set", args: ["generator", "on"] }],
-      [{ name: "set", args: ["core_temp", "41.5"] }],
+      [{ name: "set", pair: true, args: ["generator", "on"] }],
+      [{ name: "set", pair: true, args: ["core_temp", "41.5"] }],
     ]
   );
   assert.equal(b.children[0].kind, "directive", "a #set line prints nothing");
@@ -140,8 +140,19 @@ test("reads #set as a two-argument tag", () => {
 test("a #set value keeps its spaces and stops at the next tag", () => {
   const b = block("= main\n  #set candle = burning bright #delay 100\n", "main");
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", args: ["candle", "burning bright"] },
+    { name: "set", pair: true, args: ["candle", "burning bright"] },
     { name: "delay", args: ["100"] },
+  ]);
+});
+
+test("the parser records which shape a tag was written in", () => {
+  // The grammar knows the two shapes and no tag names at all; `pair` is what
+  // lets tags.ts say whether the shape written was the right one.
+  const b = block("= main\n  #set a = 1 #delay 100 #whatever x = 2\n", "main");
+  assert.deepEqual(b.children[0].tags, [
+    { name: "set", pair: true, args: ["a", "1"] },
+    { name: "delay", args: ["100"] },
+    { name: "whatever", pair: true, args: ["x", "2"] },
   ]);
 });
 
@@ -154,10 +165,12 @@ test("#set rides on headers, text lines and choices", () => {
     ].join("\n"),
     "main"
   );
-  assert.deepEqual(b.tags, [{ name: "set", args: ["generator", "off"] }]);
-  assert.deepEqual(b.children[0].tags, [{ name: "set", args: ["generator", "on"] }]);
+  assert.deepEqual(b.tags, [{ name: "set", pair: true, args: ["generator", "off"] }]);
+  assert.deepEqual(b.children[0].tags, [
+    { name: "set", pair: true, args: ["generator", "on"] },
+  ]);
   assert.deepEqual(b.children[1].tags, [
-    { name: "set", args: ["generator", "spinning up"] },
+    { name: "set", pair: true, args: ["generator", "spinning up"] },
   ]);
 });
 
@@ -170,18 +183,65 @@ test("prose that looks like an assignment stays a printed line", () => {
 test("reports a #set that is not an assignment", () => {
   const story = parse("= main\n  #set\n");
   assert.equal(story.errors.length, 1);
-  assert.match(story.errors[0].message, /#set needs a name and a value/);
+  assert.match(story.errors[0].message, /#set is written as `#set name = value`/);
   assert.equal(story.errors[0].line, 1);
 });
 
 test("reports a malformed #set wherever it sits", () => {
-  // The grammar fails the line for most of these; the check has to cover the
-  // header too, or an error would depend on which position it was written in.
-  for (const source of ["= main #set\n", "= main\n  Text #set\n", "= main\n  * Pick #set\n"]) {
+  // The grammar accepts any tag in either shape, so the check has to cover
+  // every position or an error would depend on where it was written.
+  for (const source of [
+    "= main #set\n",
+    "= main\n  Text #set generator\n",
+    "= main\n  * Pick #set generator on\n",
+    "= main\n  #set\n",
+    "= main\n  -> other #set\n= other\n  * ok\n",
+  ]) {
     const story = parse(source);
     assert.equal(story.errors.length, 1, source);
-    assert.match(story.errors[0].message, /#set needs a name and a value/, source);
+    assert.match(story.errors[0].message, /#set is written as/, source);
   }
+});
+
+test("reports an ordinary tag written as an assignment", () => {
+  // `#password a=b` used to parse as the single argument "a=b". It is a pair
+  // now, so it has to be an error rather than a quietly different password.
+  const story = parse("= main\n  ENTER PASSWORD #password a=b\n");
+  assert.deepEqual(
+    story.errors.map((e) => e.message),
+    ["#password is written as `#password <word>`"]
+  );
+});
+
+test("reports a tag given the wrong number of arguments", () => {
+  const cases: [string, RegExp][] = [
+    ["= main\n  #speed\n", /#speed is written as/],
+    ["= main\n  #theme\n", /#theme is written as/],
+    ["= main\n  Text #clear on\n", /#clear is written as/],
+    ["= main\n  Text #delay 1 2\n", /#delay is written as/],
+  ];
+  for (const [source, message] of cases) {
+    const story = parse(source);
+    assert.equal(story.errors.length, 1, source);
+    assert.match(story.errors[0].message, message, source);
+  }
+});
+
+test("reports a tag written where it does nothing", () => {
+  const story = parse("= main #title\n  * ok\n");
+  assert.deepEqual(
+    story.errors.map((e) => e.message),
+    ["#title does nothing on a block header"]
+  );
+  assert.deepEqual(parse("= main\n  * Pick #title\n").errors.map((e) => e.message), [
+    "#title does nothing on a choice",
+  ]);
+});
+
+test("an unknown tag stays inert", () => {
+  // Only a tag that means something can be written wrongly.
+  assert.deepEqual(parse("= main\n  Text #whatever a b c\n  * ok\n").errors, []);
+  assert.deepEqual(parse("= main #whatever x = y\n  * ok\n").errors, []);
 });
 
 test("unescapes text, and joins it back into one segment", () => {
@@ -227,7 +287,9 @@ test("a lone backslash survives untouched", () => {
 
 test("a #set value can hold an escaped hash", () => {
   const b = block("= main\n  #set colour = \\#ff0000\n", "main");
-  assert.deepEqual(b.children[0].tags, [{ name: "set", args: ["colour", "#ff0000"] }]);
+  assert.deepEqual(b.children[0].tags, [
+    { name: "set", pair: true, args: ["colour", "#ff0000"] },
+  ]);
 });
 
 test("escapes do not reach a tag's arguments", () => {

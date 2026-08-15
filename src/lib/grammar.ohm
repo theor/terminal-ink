@@ -39,14 +39,13 @@ Terminal {
   escapable = "#" | "{" | "}" | "=" | "*" | "-" | "/"
 
   tags    = tagItem*
-  tagItem = setTag | tag
-  // Assignment is a tag so that no line of prose can ever become one: `#` is
-  // the one character text cannot contain. The value runs to the next tag, so
-  // it may hold spaces.
-  setTag  = "#set" hs+ ident hs* "=" hs* value
-  // A `#set` that is not a well-formed assignment must not fall back to being
-  // an inert unknown tag -- it fails the line instead, and gets reported.
-  tag      = ~("#set" hs) "#" ident tagArg* hs*
+  tagItem = pairTag | tag
+  // The two shapes a tag can take. No tag *name* appears here: which names are
+  // real, which shape each one takes and what it does are all in tags.ts, so
+  // adding a tag needs no grammar change. A pair keeps its spaces because the
+  // value runs to the next tag; ordinary arguments are split on whitespace.
+  pairTag  = "#" ident hs+ ident hs* "=" hs* value
+  tag      = "#" ident tagArg* hs*
   tagArg   = hs+ argToken
   argToken = (~(hs | "#") any)+
 
