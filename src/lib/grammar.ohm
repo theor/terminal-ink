@@ -1,0 +1,17 @@
+Arithmetic  {
+  Exp
+    = Block+
+
+  Block
+    = #("= " ident nl) #((choice|text)*)
+  
+  ident
+    = letter alnum*
+  
+  ws = " " | "\t"
+  nl = "\r" | "\n"
+  indent = ws*
+  text = (alnum | ws )+ nl
+  choice
+    = indent "* " text+
+}

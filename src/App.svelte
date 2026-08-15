@@ -1,12 +1,14 @@
 <script lang="ts">
-  import InkTerminal from './lib/InkTerminal.svelte'
+  // import InkTerminal from './lib/InkTerminal.svelte'
+  import ParserEditor from './lib/ParserEditor.svelte';
 </script>
 
 <main>
  
 
   <div class="card">
-    <InkTerminal />
+    <ParserEditor />
+    <!-- <InkTerminal /> -->
   </div>
 </main>
 
