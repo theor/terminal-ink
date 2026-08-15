@@ -1,0 +1,41 @@
+// A warded grimoire. Written to exercise the library theme.
+
+= wake #theme library #speed 18
+set volumes = Three
+set candle = lit
+
+The book is warm under your hand.
+
+Ink stirs beneath the vellum, and the letters surface one at a time, as
+though someone were writing them just ahead of your reading.
+
+Speak the word of opening. #password sable
+-> shelf
+
+= shelf #clear
+The Shelf of Quiet Things #title
+The candle is {candle}. {volumes} volumes lie open before you.
+* The Astronomer's Complaint -> astronomer
+* A Bestiary of Small Griefs -> bestiary
+* Attend to the candle
+  * Pinch it out
+    set candle = out
+    Darkness, and the smell of tallow. #delay 1200
+  * Trim the wick
+    set candle = burning bright
+    The flame steadies. #delay 1200
+  * Leave it -> back
+* Close the book -> end
+
+= astronomer #clear
+The Astronomer's Complaint #title
+She numbered the stars for forty years and found one missing.
+
+Nobody would tell her which.
+* Back -> back
+
+= bestiary #clear
+A Bestiary of Small Griefs #title
+Entry the eleventh: the Lamentable Moth, which eats only letters
+of apology, and is therefore always hungry.
+* Back -> back

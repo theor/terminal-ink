@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { typewriter } from "./TypingEffect.ts";
   import type { Runner, Output, RunChoice, StepResult } from "./Runner.ts";
+  import { DEFAULT_THEME, themeFor } from "./themes/index.ts";
 
   let {
     runner,
@@ -23,8 +24,12 @@
   let choices = $state<RunChoice[]>([]);
   let halted = $state(false);
   let password = $state<string | null>(null);
+  let themeName = $state(DEFAULT_THEME);
   let speed = DEFAULT_SPEED;
   let nextId = 0;
+
+  const theme = $derived(themeFor(themeName));
+  const Chrome = $derived(theme.chrome);
 
   /**
    * Bumped on every restart. A drain loop that finds the generation has moved
@@ -44,6 +49,7 @@
       choices = [];
       halted = false;
       password = null;
+      themeName = DEFAULT_THEME;
       speed = DEFAULT_SPEED;
       doneTyping = null;
       void drain(generation, r.start());
@@ -67,17 +73,23 @@
     for (const output of step.outputs) {
       if (gen !== generation) return;
 
+      // #theme is handled here rather than in the runner: it changes how the
+      // story looks, not what it does.
+      const nextTheme = tagArg(output, "theme");
+      if (nextTheme) themeName = nextTheme;
+
       const nextSpeed = tagArg(output, "speed");
       if (nextSpeed) speed = parseInt(nextSpeed);
       if (output.tags.some((t) => t.name === "clear")) lines = [];
 
       if (output.text !== null) {
+        const title = output.tags.some((t) => t.name === "title");
         lines = [
           ...lines,
           {
             id: nextId++,
-            text: output.text,
-            title: output.tags.some((t) => t.name === "title"),
+            text: title ? theme.strings.title(output.text) : output.text,
+            title,
             speed,
           },
         ];
@@ -116,7 +128,7 @@
     if (entered.toLowerCase() !== (password ?? "").toLowerCase()) {
       lines = [
         ...lines,
-        { id: nextId++, text: "ACCESS DENIED", title: false, speed },
+        { id: nextId++, text: theme.strings.wrongPassword, title: false, speed },
       ];
       return;
     }
@@ -137,80 +149,158 @@
   }
 </script>
 
-<div class="theme-green" class:fullscreen class:contained={!fullscreen}>
-  <div id="monitor" class="on">
-    <div id="screen">
-      <div id="crt">
-        <div class="scanline"></div>
-        <div class="terminal">
-          {#each lines as line (line.id)}
-            {#if line.title}
-              <h3 use:typewriter={{ text: `// ${line.text} //`, speed: line.speed, ondone: () => doneTyping?.() }}></h3>
-            {:else}
-              <p use:typewriter={{ text: line.text, speed: line.speed, ondone: () => doneTyping?.() }}></p>
-            {/if}
-          {/each}
+<Chrome {fullscreen}>
+  <div class="content">
+    {#each lines as line (line.id)}
+      {#if line.title}
+        <!-- svelte-ignore a11y_missing_content -- the typewriter action fills it -->
+        <h3
+          use:typewriter={{
+            text: line.text,
+            speed: line.speed,
+            ondone: () => doneTyping?.(),
+          }}
+        ></h3>
+      {:else}
+        <p
+          use:typewriter={{
+            text: line.text,
+            speed: line.speed,
+            ondone: () => doneTyping?.(),
+          }}
+        ></p>
+      {/if}
+    {/each}
 
-          {#if password !== null}
-            <div
-              class="prompt"
-              inputmode="numeric"
-              contenteditable="true"
-              tabindex="0"
-              role="textbox"
-              spellcheck="false"
-              onkeydown={onPasswordKey}
-            ></div>
-          {:else if halted && choices.length === 0}
-            <p class="halted">-- END OF LINE --</p>
-          {:else}
-            <ol>
-              {#each choices as choice, i (choice.index)}
-                <li>
-                  <a
-                    href="#/"
-                    role="button"
-                    tabindex={i + 1}
-                    onkeydown={onChoiceKey(i)}
-                    onclick={() => choose(i)}>{choice.label}</a
-                  >
-                </li>
-              {/each}
-            </ol>
-          {/if}
-        </div>
-        <button id="toggleFullscreen" onclick={toggleFullScreen}>f</button>
-      </div>
-    </div>
+    {#if password !== null}
+      <div
+        class="prompt"
+        inputmode={theme.passwordInputMode}
+        contenteditable="true"
+        tabindex="0"
+        role="textbox"
+        spellcheck="false"
+        onkeydown={onPasswordKey}
+      ></div>
+    {:else if halted && choices.length === 0}
+      <p class="halted">{theme.strings.end}</p>
+    {:else}
+      <ol>
+        {#each choices as choice, i (choice.index)}
+          <li>
+            <a
+              href="#/"
+              role="button"
+              tabindex={i + 1}
+              onkeydown={onChoiceKey(i)}
+              onclick={() => choose(i)}>{choice.label}</a
+            >
+          </li>
+        {/each}
+      </ol>
+    {/if}
   </div>
-</div>
+</Chrome>
+
+<button class="toggle-fullscreen" onclick={toggleFullScreen}>f</button>
 
 <style>
+  /* Everything here is written against the theme's custom properties. A theme
+     that wants something the properties cannot express styles it from its own
+     chrome instead. */
+  .content {
+    position: relative;
+    height: 100%;
+    padding: var(--term-padding, 2rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    word-break: break-word;
+    color: var(--term-color);
+    font-family: var(--term-font);
+    text-transform: var(--term-transform, none);
+    text-shadow: var(--term-text-shadow, none);
+    animation: var(--term-text-anim, none);
+  }
+  .content :is(p, h3, ol, li, a) {
+    color: inherit;
+    margin: 0;
+  }
+
+  .content ol {
+    padding-left: 0;
+    list-style: var(--term-choice-list, none);
+  }
+  .content li {
+    padding-left: 0;
+  }
+  .content a::before {
+    content: var(--term-choice-marker, "");
+  }
+  .content a:focus::before {
+    content: var(--term-focus-open, "");
+  }
+  .content a:focus::after {
+    content: var(--term-focus-close, "");
+  }
+
   .halted {
     opacity: 0.6;
   }
 
-  /* app.css sizes the terminal by pinning #crt to the viewport, which only
-     works when it owns the page. Inside the editor's preview pane it has to be
-     given a box of its own instead. */
-  .contained {
-    height: 100%;
+  .prompt {
     display: flex;
-    overflow: auto;
-    container-type: inline-size;
+    flex-shrink: 1;
+    border: none;
+    background: transparent;
+    caret-color: transparent;
+    font-family: var(--term-font);
+    font-size: inherit;
+    text-transform: var(--term-transform, none);
+    animation: var(--term-text-anim, none);
+    field-sizing: content;
   }
-  .contained #monitor {
-    margin: auto;
-    padding: 2cqw;
+  .prompt:focus {
+    outline: none;
   }
-  .contained #screen {
-    height: 45cqw;
+  .prompt::before {
+    content: var(--term-prompt-marker, "> ");
   }
-  /* app.css sizes the type off the viewport (8.2vmin), which is far too big
-     for half a window. In the pane it scales off the pane instead, tuned so
-     the 80-column screen just fits. */
-  .contained #crt {
-    height: 100%;
-    font-size: 2.8cqw;
+  .prompt:focus::after {
+    content: " ";
+    display: inline-block;
+    width: var(--term-cursor-w, 1em);
+    height: var(--term-cursor-h, 1em);
+    background: var(--term-color);
+    animation: var(--term-cursor-anim);
+  }
+
+  /* .typewriter is added by the action at runtime, so it has to be :global --
+     scoped under .content it still cannot leak out of the terminal. */
+  .content :global(.typewriter)::after {
+    content: " ";
+    display: inline-block;
+    width: var(--term-cursor-w, 1rem);
+    height: var(--term-cursor-h, 1rem);
+    background: var(--term-color);
+  }
+
+  .content ::selection {
+    background: var(--term-color);
+    color: var(--term-bg);
+    text-shadow: none;
+  }
+
+  .toggle-fullscreen {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    width: 2rem;
+    border: none;
+    background-color: transparent;
+    color: transparent;
+    z-index: 1000;
+  }
+  .toggle-fullscreen:hover {
+    color: var(--term-color, #fff);
   }
 </style>

@@ -18,7 +18,8 @@ live.
 - `yarn && yarn dev`
 - edit the story in the left-hand pane; the terminal on the right restarts as you type
 
-`src/assets/story.term` is what the editor opens with.
+`src/assets/story.term` is what the editor opens with; the dropdown in the
+toolbar switches to `grimoire.term`, a short example of the library theme.
 
 # The format
 
@@ -50,9 +51,14 @@ Generator: {generator}
 
 Choices nested under a choice become a sub-menu; `-> back` leaves it.
 
-A choice that neither diverts nor opens a sub-menu **redraws the current block**,
+A choice that neither diverts nor opens a sub-menu **redraws the current screen**,
 which is how a screen picks up a variable you just changed. Put `#clear` on the
 block header so the redraw replaces the screen instead of scrolling.
+
+Inside a sub-menu the current screen is the sub-menu, so a redraw refreshes only
+the lines under that choice -- whatever the block printed above stays as it was.
+If a change needs to refresh the whole screen, divert to a block (`-> shelf`)
+rather than nesting.
 
 `set` runs whenever it is executed, redraws included -- so initialisation belongs
 in a block you divert away from (like `boot`), not in a menu you return to.
@@ -69,8 +75,38 @@ block header, where they run as the block is entered.
 - `#delay <milliseconds>` waits after the line is printed - defaults to 1500
 - `#title` outputs a header
 - `#clear` wipes the screen
-- `#password <digits>` prompts for a password and **stops the story until it is
-  answered** (digits only for now)
+- `#password <word>` prompts for a password and **stops the story until it is
+  answered**
+- `#theme <name>` switches the look (see below)
+
+# Themes
+
+A theme is the object the fiction says you are looking at. Two ship today:
+
+| Name | |
+| --- | --- |
+| `crt` | green phosphor terminal, scan lines, blinking block cursor (default) |
+| `library` | a warded book: parchment, leather binding, candlelight, ink |
+
+Select one with a tag, usually on the first block:
+
+```
+= wake #theme library
+```
+
+It can change mid-story -- put `#theme` on any block header and that screen
+onwards uses it.
+
+A theme is a frame plus a set of CSS custom properties, and nothing else. See
+`src/lib/themes/`: a chrome component draws the frame and declares the
+properties (`--term-color`, `--term-font`, `--term-prompt-marker`, ...), and a
+registry entry gives it its wording -- a CRT denies access, a book refuses you.
+The content markup in `Terminal.svelte` is shared and reads only those
+properties, so adding a third theme means adding a directory, not editing the
+terminal.
+
+Fonts are self-hosted in `public/fonts`, because the machine running this at a
+game table may well have no wifi.
 
 # Development
 

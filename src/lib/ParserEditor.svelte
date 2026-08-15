@@ -3,7 +3,8 @@
   import type monaco from "monaco-editor";
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 
-  import initialSource from "../assets/story.term?raw";
+  import storySource from "../assets/story.term?raw";
+  import grimoireSource from "../assets/grimoire.term?raw";
   import { parse, type ParseError } from "./Parser.ts";
   import { Runner } from "./Runner.ts";
   import Terminal from "./Terminal.svelte";
@@ -11,6 +12,13 @@
   /** How long to wait after a keystroke before restarting the preview. */
   const RESTART_DELAY = 500;
 
+  const STORIES: Record<string, string> = {
+    "story.term": storySource,
+    "grimoire.term": grimoireSource,
+  };
+  const initialSource = STORIES["story.term"];
+
+  let storyName = $state("story.term");
   let source = $state(initialSource);
   let story = $derived(parse(source));
   let errors = $derived(story.errors);
@@ -25,6 +33,12 @@
 
   function restart() {
     runner = new Runner(story);
+  }
+
+  function loadStory(name: string) {
+    storyName = name;
+    source = STORIES[name];
+    editor?.setValue(source);
   }
 
   let firstParse = true;
@@ -114,7 +128,15 @@
 <div class="split">
   <div class="pane">
     <div class="toolbar">
-      <span class="name">story.term</span>
+      <select
+        aria-label="story"
+        value={storyName}
+        onchange={(e) => loadStory(e.currentTarget.value)}
+      >
+        {#each Object.keys(STORIES) as name}
+          <option value={name}>{name}</option>
+        {/each}
+      </select>
       <button onclick={restart}>restart preview</button>
     </div>
     <div bind:this={divEl} class="editor"></div>
@@ -157,9 +179,6 @@
     gap: 0.75rem;
     padding: 0.25rem 0.5rem;
     font-size: 0.85rem;
-  }
-  .name {
-    opacity: 0.6;
   }
   .errors {
     flex: 0 0 auto;
