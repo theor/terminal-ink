@@ -1,8 +1,6 @@
 // A warded grimoire. Written to exercise the library theme.
 
-= wake #theme library #speed 18
-set volumes = Three
-set candle = lit
+= wake #theme library #speed 18 #set volumes = Three #set candle = lit
 
 The book is warm under your hand.
 
@@ -18,11 +16,9 @@ The candle is {candle}. {volumes} volumes lie open before you.
 * The Astronomer's Complaint -> astronomer
 * A Bestiary of Small Griefs -> bestiary
 * Attend to the candle
-  * Pinch it out
-    set candle = out
+  * Pinch it out #set candle = out
     Darkness, and the smell of tallow. #delay 1200
-  * Trim the wick
-    set candle = burning bright
+  * Trim the wick #set candle = burning bright
     The flame steadies. #delay 1200
   * Leave it -> back
 * Close the book -> end

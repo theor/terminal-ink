@@ -23,6 +23,9 @@ toolbar switches to `grimoire.term`, a short example of the library theme.
 
 # The format
 
+A tour follows; [`FORMAT.md`](FORMAT.md) is the full reference -- every line
+form, every `#tag`, and the traps worth knowing before you write a long one.
+
 A story is a list of **blocks**. A block is one screen: it prints its lines, then
 offers its choices and waits.
 
@@ -31,8 +34,7 @@ offers its choices and waits.
 GRETA BASE #title
 Generator: {generator}
 * Diagnostics -> diagnostics
-* Toggle generator
-  set generator = on
+* Toggle generator #set generator = on
   Generator spinning up... #delay 800
 * Reboot -> boot
 ```
@@ -45,9 +47,14 @@ Generator: {generator}
 | `-> target` | go to a block. Also valid inline on a choice: `* Comms -> comms` |
 | `-> back` | return to the screen you came from |
 | `-> end` | stop |
-| `set name = value` | assign a variable |
+| `#set name = value` | assign a variable |
 | `{name}` | print a variable. An unset one prints as `{name}`. |
+| `\#` | print a reserved character literally |
 | `// ...` | comment |
+
+Every line form but plain text starts with a sigil, so no line of prose can
+turn into a directive by accident -- a line reading `set course = home` prints,
+it does not assign.
 
 Choices nested under a choice become a sub-menu; `-> back` leaves it.
 
@@ -60,8 +67,9 @@ the lines under that choice -- whatever the block printed above stays as it was.
 If a change needs to refresh the whole screen, divert to a block (`-> shelf`)
 rather than nesting.
 
-`set` runs whenever it is executed, redraws included -- so initialisation belongs
-in a block you divert away from (like `boot`), not in a menu you return to.
+`#set` runs whenever it is executed, redraws included -- so initialisation
+belongs in a block you divert away from (like `boot`), not on a menu you return
+to.
 
 Text lines are matched one at a time, so a line that does not parse is reported
 on its own and the rest of the story keeps running.
@@ -71,6 +79,8 @@ on its own and the rest of the story keeps running.
 Tags go at the end of a line, or on a line of their own. They also work on a
 block header, where they run as the block is entered.
 
+- `#set <name> = <value>` assigns a variable. The value may contain spaces, and
+  on a choice it fires when that choice is picked: `* Toggle #set gen = on`
 - `#speed <number>` changes the speed of the typewriter effect - the higher, the slower
 - `#delay <milliseconds>` waits after the line is printed - defaults to 1500
 - `#title` outputs a header
@@ -78,6 +88,10 @@ block header, where they run as the block is entered.
 - `#password <word>` prompts for a password and **stops the story until it is
   answered**
 - `#theme <name>` switches the look (see below)
+
+Those seven are the whole set. [`FORMAT.md`](FORMAT.md#tags) covers where each
+one may sit and when it fires -- a header tag re-fires on every redraw, a tag on
+a choice fires when that choice is picked.
 
 # Themes
 

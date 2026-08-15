@@ -220,16 +220,21 @@ export class Runner {
         case "choice":
           // Collected when the screen is presented, not executed inline.
           break;
-        case "set":
-          this.vars.set(node.name, node.value);
-          break;
         case "text":
+          // Before the render, so a `#set` on a line is visible to a `{var}`
+          // on that same line -- the same order `#clear` runs in.
+          this.applySets(node.tags);
           this.emit(this.render(node.segments), node.tags);
           break;
         case "directive":
+          this.applySets(node.tags);
           this.emit(null, node.tags);
           break;
         case "divert":
+          // Before the jump, so a `#set` here is in place by the time the
+          // target block renders. Without this a tag on a divert line -- the
+          // one line form that leaves the block -- would quietly do nothing.
+          this.emitTags(node.tags);
           this.cursor = null;
           this.jump(node.target);
           break;
@@ -281,7 +286,23 @@ export class Runner {
   }
 
   private emitTags(tags: Tag[]) {
-    if (tags.length > 0) this.emit(null, tags);
+    if (tags.length === 0) return;
+    this.applySets(tags);
+    this.emit(null, tags);
+  }
+
+  /**
+   * Applies every `#set name = value` on a line. Header tags run through here
+   * on entry *and* on every redraw, so an assignment on a block header
+   * re-initialises the block each time it is drawn -- put one on a block you
+   * divert away from, not on a menu you come back to.
+   */
+  private applySets(tags: Tag[]) {
+    for (const tag of tags) {
+      if (tag.name === "set" && tag.args.length === 2) {
+        this.vars.set(tag.args[0], tag.args[1]);
+      }
+    }
   }
 
   /** Substitutes `{var}`; an unset variable is left visible as written. */

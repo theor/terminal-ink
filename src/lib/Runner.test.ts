@@ -30,8 +30,92 @@ test("runs a block and offers its choices", () => {
 });
 
 test("substitutes variables, and leaves unset ones visible", () => {
-  const r = runner("= main\nset mode = SAFE\nMode: {mode} / {missing}\n* ok\n");
+  const r = runner("= main\n#set mode = SAFE\nMode: {mode} / {missing}\n* ok\n");
   assert.deepEqual(lines(r.start()), ["Mode: SAFE / {missing}"]);
+});
+
+// --- #set -----------------------------------------------------------------
+
+test("#set assigns from every position a tag may sit", () => {
+  const r = runner(
+    [
+      "= main #set a = header",
+      "#set b = own line",
+      "Printed #set c = text line",
+      "* Pick #set d = choice",
+    ].join("\n")
+  );
+  const step = r.start();
+  assert.deepEqual(lines(step), ["Printed"], "a #set line prints nothing of its own");
+  assert.deepEqual(
+    ["a", "b", "c"].map((k) => r.vars.get(k)),
+    ["header", "own line", "text line"]
+  );
+  assert.equal(r.vars.get("d"), undefined, "a choice's #set waits until it is picked");
+
+  r.select(0);
+  assert.equal(r.vars.get("d"), "choice");
+});
+
+test("a value may hold spaces", () => {
+  const r = runner("= main\n#set candle = burning bright\n{candle}\n* ok\n");
+  assert.deepEqual(lines(r.start()), ["burning bright"]);
+});
+
+test("a #set runs before the line it sits on is printed", () => {
+  // Same order as #clear, so a line can assert a new state and display it.
+  const r = runner("= main\nGenerator: {generator} #set generator = on\n* ok\n");
+  assert.deepEqual(lines(r.start()), ["Generator: on"]);
+});
+
+test("a #set on a choice runs before the choice's body", () => {
+  const r = runner(
+    ["= main", "* Toggle #set generator = on", "  Generator: {generator}"].join("\n")
+  );
+  r.start();
+  assert.ok(lines(r.select(0)).includes("Generator: on"));
+});
+
+test("a #set on a block header re-runs on every redraw", () => {
+  // Pinned deliberately, as the old block-level `set` was: a header
+  // assignment re-initialises the block every time it is drawn, so it belongs
+  // on a block you divert away from, not on a menu you come back to.
+  const r = runner(
+    ["= main #set generator = off", "Generator: {generator}", "* Toggle #set generator = on"].join("\n")
+  );
+  r.start();
+  assert.deepEqual(lines(r.select(0)), ["Generator: off"]);
+});
+
+test("a #set outside the redrawn screen keeps its value", () => {
+  const r = runner(
+    ["= boot #set generator = off", "-> main", "= main", "Generator: {generator}", "* Toggle #set generator = on"].join("\n")
+  );
+  r.start();
+  assert.deepEqual(lines(r.select(0)), ["Generator: on"], "main has no #set to undo it");
+});
+
+test("a tag on a divert line fires before the jump", () => {
+  const r = runner(
+    ["= main", "-> other #set flag = 1", "= other", "Flag: {flag}", "* ok"].join("\n")
+  );
+  const step = r.start();
+  assert.deepEqual(lines(step), ["Flag: 1"]);
+});
+
+test("escaped sigils reach the screen as written", () => {
+  const r = runner(
+    ["= main", "Type \\-> to continue", "\\* not a choice", "C:\\Users\\theor", "* ok"].join("\n")
+  );
+  const step = r.start();
+  assert.deepEqual(lines(step), ["Type -> to continue", "* not a choice", "C:\\Users\\theor"]);
+  assert.deepEqual(labels(step), ["ok"], "only the real choice is offered");
+});
+
+test("prose that looks like an assignment is printed", () => {
+  const r = runner("= main\nset generator = on\n* ok\n");
+  assert.deepEqual(lines(r.start()), ["set generator = on"]);
+  assert.equal(r.vars.get("generator"), undefined);
 });
 
 test("carries tags through to the output", () => {
@@ -73,7 +157,7 @@ test("a divert cycle is cut off instead of hanging", () => {
 
 test("a plain choice redraws the screen without growing the stack", () => {
   const r = runner(
-    ["= main #clear", "Generator: {generator}", "* Toggle", "  set generator = on"].join("\n")
+    ["= main #clear", "Generator: {generator}", "* Toggle", "  #set generator = on"].join("\n")
   );
   r.start();
   const depth = r.depth;
@@ -86,10 +170,11 @@ test("a plain choice redraws the screen without growing the stack", () => {
 });
 
 test("a set at block level re-runs on every redraw", () => {
-  // Pinned deliberately: `set` runs whenever it is executed, so initialisation
-  // belongs in a block you divert away from, not in the menu you return to.
+  // Pinned deliberately: a `#set` runs whenever it is executed, so
+  // initialisation belongs in a block you divert away from, not in the menu
+  // you return to.
   const r = runner(
-    ["= main", "set generator = off", "Generator: {generator}", "* Toggle", "  set generator = on"].join("\n")
+    ["= main", "#set generator = off", "Generator: {generator}", "* Toggle", "  #set generator = on"].join("\n")
   );
   r.start();
   assert.deepEqual(lines(r.select(0)), ["Generator: off"]);
@@ -122,7 +207,7 @@ test("-> back at the outermost screen redraws instead of underflowing", () => {
 
 test("an inline divert on a choice runs its body first", () => {
   const r = runner(
-    ["= main", "* Go -> other", "  set flag = 1", "  Leaving", "= other", "Arrived", "* ok"].join("\n")
+    ["= main", "* Go -> other", "  #set flag = 1", "  Leaving", "= other", "Arrived", "* ok"].join("\n")
   );
   r.start();
   const step = r.select(0);
@@ -199,6 +284,35 @@ test("a full path through story.term", () => {
   assert.equal(r.currentBlock?.name, "main");
   assert.ok(lines(back).includes("Generator: on"), "state survives the trip back");
   assert.deepEqual(labels(back), ["Diagnostics", "Controls", "Comms", "Reboot"]);
+});
+
+const grimoireSource = readFileSync(
+  fileURLToPath(new URL("../assets/grimoire.term", import.meta.url)),
+  "utf8"
+);
+
+test("grimoire.term parses, and its multi-word value survives", () => {
+  const r = runner(grimoireSource);
+  r.start();
+  const shelf = r.resume(true); // past the ward
+  assert.ok(
+    lines(shelf).includes("The candle is lit. Three volumes lie open before you."),
+    "both header #sets ran"
+  );
+
+  const candle = r.select(2); // Attend to the candle
+  assert.deepEqual(labels(candle), ["Pinch it out", "Trim the wick", "Leave it"]);
+
+  const trimmed = r.select(1); // Trim the wick -- a value with a space in it
+  assert.equal(r.vars.get("candle"), "burning bright");
+  assert.ok(lines(trimmed).includes("The flame steadies."));
+
+  assert.ok(
+    lines(r.select(2)).includes(
+      "The candle is burning bright. Three volumes lie open before you."
+    ),
+    "leaving the sub-menu redraws the shelf with the new value"
+  );
 });
 
 test("rebooting from the menu re-runs the boot sequence", () => {

@@ -1,7 +1,6 @@
 // Ported from story.ink. This is the Mothership session terminal.
 
-= boot #speed 5
-set generator = off
+= boot #speed 5 #set generator = off
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
 Copyright (C) 2981, 2987 Reythorne Corp. /
@@ -41,8 +40,7 @@ Generator: {generator}
 DIAGNOSTICS #title
 Generator [{generator}]
 Backup generator [off]
-* Toggle generator
-  set generator = on
+* Toggle generator #set generator = on
   Generator spinning up... #delay 800
 * Back -> back
 

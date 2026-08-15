@@ -125,15 +125,120 @@ test("reads diverts, inline and standalone", () => {
   });
 });
 
-test("reads set statements", () => {
-  const b = block("= main\n  set generator = on\n  set core_temp = 41.5\n", "main");
+test("reads #set as a two-argument tag", () => {
+  const b = block("= main\n  #set generator = on\n  #set core_temp = 41.5\n", "main");
   assert.deepEqual(
-    b.children.map((n) => (n.kind === "set" ? [n.name, n.value] : null)),
+    b.children.map((n) => n.tags),
     [
-      ["generator", "on"],
-      ["core_temp", "41.5"],
+      [{ name: "set", args: ["generator", "on"] }],
+      [{ name: "set", args: ["core_temp", "41.5"] }],
     ]
   );
+  assert.equal(b.children[0].kind, "directive", "a #set line prints nothing");
+});
+
+test("a #set value keeps its spaces and stops at the next tag", () => {
+  const b = block("= main\n  #set candle = burning bright #delay 100\n", "main");
+  assert.deepEqual(b.children[0].tags, [
+    { name: "set", args: ["candle", "burning bright"] },
+    { name: "delay", args: ["100"] },
+  ]);
+});
+
+test("#set rides on headers, text lines and choices", () => {
+  const b = block(
+    [
+      "= main #set generator = off",
+      "  Generator online #set generator = on",
+      "  * Toggle #set generator = spinning up",
+    ].join("\n"),
+    "main"
+  );
+  assert.deepEqual(b.tags, [{ name: "set", args: ["generator", "off"] }]);
+  assert.deepEqual(b.children[0].tags, [{ name: "set", args: ["generator", "on"] }]);
+  assert.deepEqual(b.children[1].tags, [
+    { name: "set", args: ["generator", "spinning up"] },
+  ]);
+});
+
+test("prose that looks like an assignment stays a printed line", () => {
+  const b = block("= main\n  set generator = on\n", "main");
+  assert.equal(b.children[0].kind, "text");
+  assert.deepEqual(texts(b.children), ["set generator = on"]);
+});
+
+test("reports a #set that is not an assignment", () => {
+  const story = parse("= main\n  #set\n");
+  assert.equal(story.errors.length, 1);
+  assert.match(story.errors[0].message, /#set needs a name and a value/);
+  assert.equal(story.errors[0].line, 1);
+});
+
+test("reports a malformed #set wherever it sits", () => {
+  // The grammar fails the line for most of these; the check has to cover the
+  // header too, or an error would depend on which position it was written in.
+  for (const source of ["= main #set\n", "= main\n  Text #set\n", "= main\n  * Pick #set\n"]) {
+    const story = parse(source);
+    assert.equal(story.errors.length, 1, source);
+    assert.match(story.errors[0].message, /#set needs a name and a value/, source);
+  }
+});
+
+test("unescapes text, and joins it back into one segment", () => {
+  const b = block("= main\n  abc\\#def\n", "main");
+  const node = b.children[0] as TextNode;
+  assert.deepEqual(node.segments, [{ kind: "text", value: "abc#def" }]);
+});
+
+test("escapes every reserved character", () => {
+  const b = block("= main\n  \\# \\{ \\} \\= \\* \\- \\/\n", "main");
+  assert.deepEqual(texts(b.children), ["# { } = * - /"]);
+});
+
+test("an escaped sigil at the start of a line prints instead of parsing", () => {
+  const b = block(
+    ["= main", "  \\= main", "  \\* Diagnostics", "  \\// note", "  \\-> main"].join("\n"),
+    "main"
+  );
+  assert.deepEqual(texts(b.children), ["= main", "* Diagnostics", "// note", "-> main"]);
+});
+
+test("an escaped arrow in a choice label does not divert", () => {
+  const b = block("= main\n  * Type \\-> to continue\n", "main");
+  const choice = b.children[0] as ChoiceNode;
+  assert.equal(segmentsToString(choice.label), "Type -> to continue");
+  assert.equal(choice.divert, undefined);
+});
+
+test("escapes and interpolation coexist", () => {
+  const b = block("= main\n  \\{{mode}\\} costs \\#5\n", "main");
+  const node = b.children[0] as TextNode;
+  assert.deepEqual(node.segments, [
+    { kind: "text", value: "{" },
+    { kind: "var", name: "mode" },
+    { kind: "text", value: "} costs #5" },
+  ]);
+});
+
+test("a lone backslash survives untouched", () => {
+  const b = block("= main\n  C:\\Users\\theor\n  \\\\SERVER\\share\n", "main");
+  assert.deepEqual(texts(b.children), ["C:\\Users\\theor", "\\\\SERVER\\share"]);
+});
+
+test("a #set value can hold an escaped hash", () => {
+  const b = block("= main\n  #set colour = \\#ff0000\n", "main");
+  assert.deepEqual(b.children[0].tags, [{ name: "set", args: ["colour", "#ff0000"] }]);
+});
+
+test("escapes do not reach a tag's arguments", () => {
+  // A known boundary, pinned so it is not mistaken for a bug: arguments split
+  // on whitespace and stop at `#`, so a `#` cannot be escaped into one. The
+  // `#set` value is the exception, because it runs to the next tag.
+  const b = block("= main\n  ENTER PASSWORD #password se\\#ret\n", "main");
+  assert.deepEqual(b.children[0].tags, [
+    { name: "password", args: ["se\\"] },
+    { name: "ret", args: [] },
+  ]);
 });
 
 test("drops comments", () => {
@@ -190,12 +295,14 @@ test("over-indented lines are absorbed, not hung on", () => {
 
 test("round-trips through stringify", () => {
   const source = [
-    "= main #clear",
+    "= main #clear #set generator = off",
     "  GRETA BASE #title",
     "  Generator: {generator}",
+    "  Type \\-> or \\# or \\{ to go on",
+    "  \\* not a choice",
+    "  C:\\Users\\theor",
     "  * Diagnostics -> diagnostics",
-    "  * Toggle generator",
-    "    set generator = on",
+    "  * Toggle generator #set generator = spinning up",
     "    Generator online. #delay 800",
     "    -> main",
     "",
@@ -203,6 +310,20 @@ test("round-trips through stringify", () => {
     "  Reactor nominal",
     "  * Back -> back",
   ].join("\n");
-  // Reparsing our own output must give the same tree.
-  assert.equal(stringify(parse(stringify(parse(source)))), stringify(parse(source)));
+  const once = stringify(parse(source));
+  // Reparsing our own output must give the same tree -- so escapes have to be
+  // put back on the way out, and a #set has to keep its `=`.
+  assert.deepEqual(parse(once).errors, []);
+  assert.equal(stringify(parse(once)), once);
+  assert.deepEqual(
+    texts(parse(once).byName.get("main")!.children),
+    [
+      "GRETA BASE",
+      "Generator: {generator}",
+      "Type -> or # or { to go on",
+      "* not a choice",
+      "C:\\Users\\theor",
+    ],
+    "the text survives the trip unchanged"
+  );
 });

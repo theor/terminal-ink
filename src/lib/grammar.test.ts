@@ -34,7 +34,7 @@ test("classifies each kind of line", () => {
   assert.equal(ruleOf("= boot"), "blockLine");
   assert.equal(ruleOf("  * Diagnostics"), "choiceLine");
   assert.equal(ruleOf("  -> main"), "divertLine");
-  assert.equal(ruleOf("  set generator = on"), "setLine");
+  assert.equal(ruleOf("  #set generator = on"), "tagLine");
   assert.equal(ruleOf("  Reactor nominal"), "textLine");
   assert.equal(ruleOf("  #clear"), "tagLine");
   assert.equal(ruleOf("  // note to self"), "commentLine");
@@ -42,11 +42,42 @@ test("classifies each kind of line", () => {
   assert.equal(ruleOf("    "), "blankLine");
 });
 
-test("does not mistake prose starting with a keyword for a directive", () => {
+test("prose that looks like an assignment is printed, not executed", () => {
+  // The whole reason assignment moved behind `#`: none of these may quietly
+  // turn into state changes and vanish from the screen.
+  assert.equal(ruleOf("set generator = on"), "textLine");
+  assert.equal(ruleOf("set course = home"), "textLine");
   assert.equal(ruleOf("settings offline"), "textLine");
   assert.equal(ruleOf("set course for home"), "textLine");
-  assert.equal(ruleOf("set = on"), "textLine", "incomplete set falls back to text");
+  assert.equal(ruleOf("set = on"), "textLine");
   assert.equal(ruleOf("Reactor = nominal"), "textLine");
+});
+
+test("accepts #set in every position a tag may sit", () => {
+  assert.ok(accepts("#set generator = on"), "on its own line");
+  assert.ok(accepts("= main #set generator = on"), "on a block header");
+  assert.ok(accepts("Generator online #set generator = on"), "on a text line");
+  assert.ok(accepts("* Toggle #set generator = on"), "on a choice");
+  assert.ok(accepts("* Toggle -> main #set generator = on"), "after an inline divert");
+  assert.ok(accepts("-> main #set generator = on"), "on a divert");
+});
+
+test("a #set value may hold spaces, and stops at the next tag", () => {
+  assert.ok(accepts("#set candle = burning bright"));
+  assert.ok(accepts("#set candle = burning bright #delay 100"));
+});
+
+test("rejects a #set that is not an assignment", () => {
+  // It must not fall back to being an inert unknown tag and do nothing quietly.
+  assert.ok(!accepts("#set generator"), "no value");
+  assert.ok(!accepts("#set generator on"), "no equals sign");
+  assert.ok(!accepts("#set generator = "), "empty value");
+  assert.ok(!accepts("Generator online #set generator"), "trailing on a text line");
+});
+
+test("#set does not swallow tags that merely start with set", () => {
+  assert.ok(accepts("#settings"));
+  assert.ok(accepts("#setup 3"));
 });
 
 test("a rule of equals signs is text, not a block header", () => {
@@ -80,4 +111,34 @@ test("rejects malformed lines", () => {
   assert.ok(!accepts("= 9lives"), "block name must not start with a digit");
   assert.ok(!accepts("->"), "divert without a target");
   assert.ok(!accepts("Reactor {core temp}"), "interpolation must be one ident");
+});
+
+// --- escapes ---------------------------------------------------------------
+
+test("a backslash escapes every character the parser reserves", () => {
+  for (const ch of "#{}=*-/") {
+    assert.ok(accepts(`literal \\${ch} here`), `\\${ch} mid-line`);
+  }
+});
+
+test("an escaped sigil at the start of a line is text, not a line form", () => {
+  assert.equal(ruleOf("\\= main"), "textLine");
+  assert.equal(ruleOf("\\* Diagnostics"), "textLine");
+  assert.equal(ruleOf("\\// not a comment"), "textLine");
+  assert.equal(ruleOf("\\-> not a divert"), "textLine");
+  assert.equal(ruleOf("\\#clear"), "textLine");
+});
+
+test("an escape does not break the text around it", () => {
+  assert.ok(accepts("abc\\#def"));
+  assert.ok(accepts("cost \\{5\\} credits"));
+  assert.ok(accepts("{mode} \\-> \\{raw\\}"), "escapes and interpolation mix");
+});
+
+test("a lone backslash is just a backslash", () => {
+  // Terminals print paths and ASCII art; requiring `\\` everywhere would be a
+  // tax on every line of them.
+  assert.ok(accepts("C:\\Users\\theor"));
+  assert.ok(accepts("\\\\SERVER\\share"));
+  assert.equal(ruleOf("C:\\Users"), "textLine");
 });

@@ -92,10 +92,15 @@
       Monaco.languages.setMonarchTokensProvider("terminal", {
         tokenizer: {
           root: [
+            // First, so an escaped sigil is not highlighted as the thing it
+            // would otherwise open.
+            [/\\[#{}=*\-/]/, "string.escape"],
             [/^\s*\/\/.*$/, "comment"],
             [/^\s*=\s*\w+/, "keyword"],
             [/^\s*\*/, "keyword"],
-            [/^\s*set\b/, "keyword"],
+            // Assignment reads as a keyword even though it is spelled as a
+            // tag -- it changes state, the other tags only change the display.
+            [/#set\b/, "keyword"],
             [/->\s*\w*/, "type"],
             [/#\w+/, "annotation"],
             [/\{\s*\w+\s*\}/, "variable"],

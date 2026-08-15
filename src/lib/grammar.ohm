@@ -8,7 +8,6 @@ Terminal {
     | blockLine
     | choiceLine
     | divertLine
-    | setLine
     | textLine
     | tagLine
     | blankLine
@@ -17,27 +16,41 @@ Terminal {
   blockLine   = indent "=" hs* ident hs* tags
   choiceLine  = indent "*" hs* body divert? tags
   divertLine  = indent divert tags
-  setLine     = indent "set" hs+ ident hs* "=" hs* value tags
   // `~("=" ~"=")` keeps a malformed header (`= 9lives`) an error instead of
   // silently becoming body text, while leaving `=== SYSTEM ===` rules alone.
   textLine    = indent ~("=" ~"=") body tags
-  tagLine     = indent tag+          // a directive on its own line, e.g. `#clear`
+  tagLine     = indent tagItem+   // a directive on its own line, e.g. `#clear`
   blankLine   = hs*
 
   divert = "->" hs* ident hs*
 
-  // Text is anything up to a tag, an interpolation or a divert arrow.
+  // Text is anything up to a tag, an interpolation or a divert arrow. An
+  // escape wins over all three, so `chunk` has to stop in front of one.
   body    = segment+
-  segment = interp | chunk
+  segment = escape | interp | chunk
   interp  = "{" hs* ident hs* "}"
-  chunk   = (~("#" | "{" | "->") any)+
+  chunk   = (~("#" | "{" | "->" | escape) any)+
 
-  tags     = tag*
-  tag      = "#" ident tagArg* hs*
+  // A backslash prints the next character literally, but only for characters
+  // that mean something to the parser. Everywhere else a backslash is just a
+  // backslash, so a terminal can print `C:\Users` without doubling anything.
+  // The list is mirrored by ESCAPABLE in Parser.ts -- change both together.
+  escape    = "\\" escapable
+  escapable = "#" | "{" | "}" | "=" | "*" | "-" | "/"
+
+  tags    = tagItem*
+  tagItem = setTag | tag
+  // Assignment is a tag so that no line of prose can ever become one: `#` is
+  // the one character text cannot contain. The value runs to the next tag, so
+  // it may hold spaces.
+  setTag  = "#set" hs+ ident hs* "=" hs* value
+  // A `#set` that is not a well-formed assignment must not fall back to being
+  // an inert unknown tag -- it fails the line instead, and gets reported.
+  tag      = ~("#set" hs) "#" ident tagArg* hs*
   tagArg   = hs+ argToken
   argToken = (~(hs | "#") any)+
 
-  value  = (~"#" any)+
+  value  = (escape | ~"#" any)+
   ident  = (letter | "_") (alnum | "_")*
   indent = hs*
   hs     = " " | "\t"

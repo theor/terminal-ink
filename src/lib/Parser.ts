@@ -7,7 +7,12 @@ export type Segment =
   | { kind: "text"; value: string }
   | { kind: "var"; name: string };
 
-/** `#delay 800` -> `{ name: "delay", args: ["800"] }` */
+/**
+ * `#delay 800` -> `{ name: "delay", args: ["800"] }`
+ *
+ * Assignment is a tag too: `#set generator = on` -> `{ name: "set", args:
+ * ["generator", "on"] }`, so a value holding spaces survives as one argument.
+ */
 export interface Tag {
   name: string;
   args: string[];
@@ -39,18 +44,8 @@ export interface DivertNode extends NodeBase {
   kind: "divert";
   target: string;
 }
-export interface SetNode extends NodeBase {
-  kind: "set";
-  name: string;
-  value: string;
-}
 
-export type Node =
-  | TextNode
-  | DirectiveNode
-  | ChoiceNode
-  | DivertNode
-  | SetNode;
+export type Node = TextNode | DirectiveNode | ChoiceNode | DivertNode;
 
 export interface Block {
   name: string;
@@ -77,6 +72,20 @@ export interface Story {
 /** Name given to the implicit block wrapping content written before any `=`. */
 export const IMPLICIT_BLOCK = "start";
 
+/**
+ * Characters a backslash may escape. Mirrors `escapable` in grammar.ohm --
+ * change both together. A backslash before anything else is a plain backslash,
+ * which is what lets a terminal print `C:\Users` unaltered.
+ */
+export const ESCAPABLE = "#{}=*-/";
+
+const ESCAPE_RE = /\\([#{}=*\-/])/g;
+
+/** Drops the backslash from every escape sequence in a raw source string. */
+function unescape(raw: string): string {
+  return raw.replace(ESCAPE_RE, "$1");
+}
+
 // --- line-level semantics -------------------------------------------------
 
 type LineResult =
@@ -91,8 +100,7 @@ type LineResult =
       divert?: string;
       tags: Tag[];
     }
-  | { kind: "divert"; indent: number; target: string; tags: Tag[] }
-  | { kind: "set"; indent: number; name: string; value: string; tags: Tag[] };
+  | { kind: "divert"; indent: number; target: string; tags: Tag[] };
 
 const semantics: TerminalSemantics = grammar.createSemantics();
 
@@ -146,16 +154,6 @@ semantics.addOperation<any>("parse", {
       tags: tags.parse(),
     };
   },
-  setLine(i, _set, _h1, name, _h2, _eq, _h3, value, tags) {
-    return {
-      kind: "set",
-      indent: indentOf(i),
-      name: name.sourceString,
-      value: value.sourceString.trim(),
-      tags: tags.parse(),
-    };
-  },
-
   divert(_arrow, _h1, name, _h2) {
     return name.sourceString;
   },
@@ -171,8 +169,22 @@ semantics.addOperation<any>("parse", {
   chunk(_chars) {
     return { kind: "text", value: this.sourceString };
   },
+  escape(_backslash, ch) {
+    return { kind: "text", value: ch.sourceString };
+  },
   tags(list) {
     return list.children.map((c) => c.parse());
+  },
+  tagItem(t) {
+    return t.parse();
+  },
+  setTag(_hash, _h1, name, _h2, _eq, _h3, value) {
+    // Two arguments, always -- the value keeps its spaces instead of being
+    // split into tokens the way an ordinary tag's arguments are.
+    return {
+      name: "set",
+      args: [name.sourceString, unescape(value.sourceString.trim())],
+    };
   },
   tag(_hash, name, args, _hs) {
     return {
@@ -199,11 +211,22 @@ function indentOf(node: { sourceString: string }): number {
   return node.sourceString.length;
 }
 
-/** Drops empty runs and trims the outer edges, keeping interior spacing. */
+/**
+ * Joins neighbouring literals, drops empty runs and trims the outer edges,
+ * keeping interior spacing. Escapes arrive as segments of their own, so
+ * `abc\#def` has to come back out as one literal rather than three.
+ */
 function normalizeSegments(segments: Segment[]): Segment[] {
-  const out = segments.filter(
-    (s) => s.kind !== "text" || s.value.length > 0
-  );
+  const merged: Segment[] = [];
+  for (const segment of segments) {
+    const prev = merged[merged.length - 1];
+    // Copied, never mutated in place: the same segment object would otherwise
+    // be shared with the node the trimming below edits.
+    if (segment.kind === "text" && prev?.kind === "text") prev.value += segment.value;
+    else merged.push({ ...segment });
+  }
+
+  const out = merged.filter((s) => s.kind !== "text" || s.value.length > 0);
   const first = out[0];
   if (first?.kind === "text") first.value = first.value.replace(/^\s+/, "");
   const last = out[out.length - 1];
@@ -311,9 +334,6 @@ export function parse(source: string): Story {
       case "divert":
         push({ kind: "divert", target: r.target, tags: r.tags, line: i, indent: r.indent });
         break;
-      case "set":
-        push({ kind: "set", name: r.name, value: r.value, tags: r.tags, line: i, indent: r.indent });
-        break;
     }
   }
 
@@ -321,10 +341,16 @@ export function parse(source: string): Story {
   return story;
 }
 
-/** Reports diverts that point at a block which does not exist. */
+/**
+ * Reports diverts pointing at a block which does not exist, and `#set` tags
+ * that are not assignments. The grammar rejects most malformed `#set`s
+ * outright; what reaches here is `#set` with nothing after it, which would
+ * otherwise sit in the output as an inert unknown tag and do nothing quietly.
+ */
 function validate(story: Story) {
   const walk = (nodes: Node[]) => {
     for (const node of nodes) {
+      checkTags(node.tags, node.line);
       if (node.kind === "divert") checkTarget(node.target, node.line);
       if (node.kind === "choice") {
         if (node.divert) checkTarget(node.divert, node.line);
@@ -340,7 +366,21 @@ function validate(story: Story) {
       message: `Unknown block "${target}"`,
     });
   };
-  for (const block of story.blocks) walk(block.children);
+  const checkTags = (tags: Tag[], line: number) => {
+    for (const tag of tags) {
+      if (tag.name === "set" && tag.args.length !== 2) {
+        story.errors.push({
+          line,
+          column: 0,
+          message: "#set needs a name and a value, as `#set name = value`",
+        });
+      }
+    }
+  };
+  for (const block of story.blocks) {
+    checkTags(block.tags, block.line);
+    walk(block.children);
+  }
 }
 
 /** Divert targets handled by the runner rather than resolved to a block. */
@@ -367,9 +407,34 @@ export function segmentsToString(segments: Segment[]): string {
     .join("");
 }
 
+/**
+ * Puts back the backslashes the parser took out, so `stringify` output parses
+ * to the same tree. Only what would be read back as structure is escaped --
+ * escaping every `-` would turn readable prose into line noise.
+ */
+function toSource(text: string): string {
+  const escaped = text.replace(/[#{]/g, "\\$&").replace(/->/g, "\\->");
+  // A sigil only opens a line form at the start of one.
+  return /^(=|\*|\/\/)/.test(escaped) ? "\\" + escaped : escaped;
+}
+
+function segmentsToSource(segments: Segment[]): string {
+  return segments
+    .map((s) => (s.kind === "text" ? toSource(s.value) : `{${s.name}}`))
+    .join("");
+}
+
+function tagToString(tag: Tag): string {
+  if (tag.name === "set" && tag.args.length === 2) {
+    const [name, value] = tag.args;
+    return `#set ${name} = ${value.replace(/#/g, "\\#")}`;
+  }
+  return `#${tag.name}${tag.args.map((a) => " " + a).join("")}`;
+}
+
 function tagsToString(tags: Tag[]): string {
   if (tags.length === 0) return "";
-  return " " + tags.map((t) => `#${t.name}${t.args.map((a) => " " + a).join("")}`).join(" ");
+  return " " + tags.map(tagToString).join(" ");
 }
 
 function nodeToString(node: Node, depth: number): string {
@@ -378,16 +443,14 @@ function nodeToString(node: Node, depth: number): string {
     case "text":
       // A blank line stays blank -- padding it would make it grow on re-parse.
       if (node.segments.length === 0 && node.tags.length === 0) return "";
-      return pad + segmentsToString(node.segments) + tagsToString(node.tags);
+      return pad + segmentsToSource(node.segments) + tagsToString(node.tags);
     case "directive":
       return pad + tagsToString(node.tags).trimStart();
     case "divert":
       return `${pad}-> ${node.target}${tagsToString(node.tags)}`;
-    case "set":
-      return `${pad}set ${node.name} = ${node.value}${tagsToString(node.tags)}`;
     case "choice": {
       const head =
-        `${pad}* ${segmentsToString(node.label)}` +
+        `${pad}* ${segmentsToSource(node.label)}` +
         (node.divert ? ` -> ${node.divert}` : "") +
         tagsToString(node.tags);
       return [head, ...node.children.map((c) => nodeToString(c, depth + 1))].join("\n");

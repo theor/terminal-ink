@@ -17,7 +17,6 @@ export interface TerminalActionDict<T> extends BaseActionDict<T> {
   blockLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode, arg3: NonterminalNode, arg4: IterationNode, arg5: NonterminalNode) => T;
   choiceLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode, arg3: NonterminalNode, arg4: IterationNode, arg5: NonterminalNode) => T;
   divertLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
-  setLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode, arg3: NonterminalNode, arg4: IterationNode, arg5: TerminalNode, arg6: IterationNode, arg7: NonterminalNode, arg8: NonterminalNode) => T;
   textLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
   tagLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: IterationNode) => T;
   blankLine?: (this: NonterminalNode, arg0: IterationNode) => T;
@@ -26,7 +25,11 @@ export interface TerminalActionDict<T> extends BaseActionDict<T> {
   segment?: (this: NonterminalNode, arg0: NonterminalNode) => T;
   interp?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: NonterminalNode, arg3: IterationNode, arg4: TerminalNode) => T;
   chunk?: (this: NonterminalNode, arg0: IterationNode) => T;
+  escape?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode) => T;
+  escapable?: (this: NonterminalNode, arg0: TerminalNode) => T;
   tags?: (this: NonterminalNode, arg0: IterationNode) => T;
+  tagItem?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  setTag?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: NonterminalNode, arg3: IterationNode, arg4: TerminalNode, arg5: IterationNode, arg6: NonterminalNode) => T;
   tag?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: IterationNode, arg3: IterationNode) => T;
   tagArg?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode) => T;
   argToken?: (this: NonterminalNode, arg0: IterationNode) => T;
