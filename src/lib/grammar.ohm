@@ -53,4 +53,42 @@ Terminal {
   ident  = (letter | "_") (alnum | "_")*
   indent = hs*
   hs     = " " | "\t"
+
+  // --- expressions --------------------------------------------------------
+  // Matched on their own, from `Expr`, never as part of a line: a tag's
+  // arguments are handed to tags.ts as tokens, and only the tags that want an
+  // expression bring them back here. These are syntactic rules (capitalised),
+  // so Ohm skips the whitespace between operands for us.
+
+  Expr     = OrExpr
+  OrExpr   = OrExpr "or" AndExpr   -- or
+           | AndExpr
+  AndExpr  = AndExpr "and" NotExpr -- and
+           | NotExpr
+  NotExpr  = "not" NotExpr         -- not
+           | CompExpr
+  CompExpr = AddExpr compOp AddExpr -- compare
+           | AddExpr
+  AddExpr  = AddExpr addOp MulExpr -- add
+           | MulExpr
+  MulExpr  = MulExpr mulOp Unary   -- mul
+           | Unary
+  Unary    = "-" Unary             -- negate
+           | Primary
+  Primary  = "(" Expr ")"          -- paren
+           | number
+           | string
+           | boolean
+           | varRef
+
+  // Longest first, so `<=` is not read as `<` followed by a stray `=`.
+  compOp  = "!=" | "<=" | ">=" | "<" | ">" | "="
+  addOp   = "+" | "-"
+  mulOp   = "*" | "/"
+  number  = digit+ ("." digit+)?
+  string  = "\"" (~"\"" any)* "\""
+  boolean = ("true" | "false") ~alnum
+  // A keyword is not a variable, or `not` would be a name you could set.
+  varRef  = ~keyword ident
+  keyword = ("and" | "or" | "not" | "true" | "false") ~(alnum | "_")
 }

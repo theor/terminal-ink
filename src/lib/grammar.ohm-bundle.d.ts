@@ -34,6 +34,31 @@ export interface TerminalActionDict<T> extends BaseActionDict<T> {
   ident?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode, arg1: IterationNode) => T;
   indent?: (this: NonterminalNode, arg0: IterationNode) => T;
   hs?: (this: NonterminalNode, arg0: TerminalNode) => T;
+  Expr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  OrExpr_or?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode) => T;
+  OrExpr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  AndExpr_and?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: NonterminalNode) => T;
+  AndExpr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  NotExpr_not?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode) => T;
+  NotExpr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  CompExpr_compare?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
+  CompExpr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  AddExpr_add?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
+  AddExpr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  MulExpr_mul?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
+  MulExpr?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  Unary_negate?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode) => T;
+  Unary?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  Primary_paren?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: TerminalNode) => T;
+  Primary?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  compOp?: (this: NonterminalNode, arg0: TerminalNode) => T;
+  addOp?: (this: NonterminalNode, arg0: TerminalNode) => T;
+  mulOp?: (this: NonterminalNode, arg0: TerminalNode) => T;
+  number?: (this: NonterminalNode, arg0: IterationNode, arg1: IterationNode, arg2: IterationNode) => T;
+  string?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode) => T;
+  boolean?: (this: NonterminalNode, arg0: TerminalNode) => T;
+  varRef?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  keyword?: (this: NonterminalNode, arg0: TerminalNode) => T;
 }
 
 export interface TerminalSemantics extends Semantics {

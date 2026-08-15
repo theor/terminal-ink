@@ -129,24 +129,29 @@ test("reads diverts, inline and standalone", () => {
 test("the parser splits arguments and reads nothing into them", () => {
   // Including the `=`, which is an argument like any other. Turning those
   // three back into a name and a value is tags.ts's job, not the parser's.
-  const b = block("= main\n  #set generator = on\n", "main");
+  const b = block("= main\n  #set generator = \"on\"\n", "main");
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", args: ["generator", "=", "on"] },
+    { name: "set", args: ["generator", "=", '"on"'] },
   ]);
   assert.equal(b.children[0].kind, "directive", "a #set line prints nothing");
-  assert.deepEqual(tagValues("set", ["generator", "=", "on"]), ["generator", "on"]);
+  assert.deepEqual(tagValues("set", b.children[0].tags[0].args), {
+    name: "generator",
+    value: { kind: "string", value: "on" },
+  });
 });
 
 test("a #set value keeps its spaces and stops at the next tag", () => {
-  const b = block("= main\n  #set candle = burning bright #delay 100\n", "main");
+  const b = block("= main\n  #set candle = \"burning bright\" #delay 100\n", "main");
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", args: ["candle", "=", "burning", "bright"] },
+    { name: "set", args: ["candle", "=", '"burning', 'bright"'] },
     { name: "delay", args: ["100"] },
   ]);
-  assert.deepEqual(tagValues("set", b.children[0].tags[0].args), [
-    "candle",
-    "burning bright",
-  ]);
+  // The tokens are joined back up before the expression is parsed, which is
+  // how a quoted value keeps its spaces without the grammar knowing.
+  assert.deepEqual(tagValues("set", b.children[0].tags[0].args), {
+    name: "candle",
+    value: { kind: "string", value: "burning bright" },
+  });
 });
 
 test("an unknown tag's arguments are left exactly as written", () => {
@@ -161,18 +166,20 @@ test("an unknown tag's arguments are left exactly as written", () => {
 test("#set rides on headers, text lines and choices", () => {
   const b = block(
     [
-      "= main #set generator = off",
-      "  Generator online #set generator = on",
-      "  * Toggle #set generator = spinning up",
+      "= main #set generator = \"off\"",
+      "  Generator online #set generator = \"on\"",
+      "  * Toggle #set generator = \"spinning up\"",
     ].join("\n"),
     "main"
   );
-  assert.deepEqual(b.tags, [{ name: "set", args: ["generator", "=", "off"] }]);
-  assert.deepEqual(b.children[0].tags, [{ name: "set", args: ["generator", "=", "on"] }]);
-  assert.deepEqual(tagValues("set", b.children[1].tags[0].args), [
-    "generator",
-    "spinning up",
+  assert.deepEqual(b.tags, [{ name: "set", args: ["generator", "=", '"off"'] }]);
+  assert.deepEqual(b.children[0].tags, [
+    { name: "set", args: ["generator", "=", '"on"'] },
   ]);
+  assert.deepEqual(tagValues("set", b.children[1].tags[0].args), {
+    name: "generator",
+    value: { kind: "string", value: "spinning up" },
+  });
 });
 
 test("prose that looks like an assignment stays a printed line", () => {
@@ -184,7 +191,7 @@ test("prose that looks like an assignment stays a printed line", () => {
 test("reports a #set that is not an assignment", () => {
   const story = parse("= main\n  #set\n");
   assert.equal(story.errors.length, 1);
-  assert.match(story.errors[0].message, /#set is written as `#set name = value`/);
+  assert.match(story.errors[0].message, /#set is written as `#set name = <expression>/);
   assert.equal(story.errors[0].line, 1);
 });
 
@@ -238,11 +245,16 @@ test("reports a tag written where it does nothing", () => {
   ]);
 });
 
-test("#if reads as an assignment, and is rejected on a block header", () => {
-  const b = block("= main\n  ALARM #if coolant = low\n  * ok\n", "main");
-  assert.deepEqual(tagValues("if", b.children[0].tags[0].args), ["coolant", "low"]);
+test("#if binds to an expression, and is rejected on a block header", () => {
+  const b = block("= main\n  ALARM #if coolant = \"low\"\n  * ok\n", "main");
+  assert.deepEqual(tagValues("if", b.children[0].tags[0].args), {
+    kind: "binary",
+    op: "=",
+    left: { kind: "var", name: "coolant" },
+    right: { kind: "string", value: "low" },
+  });
   assert.deepEqual(
-    parse("= main #if coolant = low\n  * ok\n").errors.map((e) => e.message),
+    parse("= main #if coolant = \"low\"\n  * ok\n").errors.map((e) => e.message),
     ["#if does nothing on a block header"]
   );
 });
@@ -369,14 +381,14 @@ test("over-indented lines are absorbed, not hung on", () => {
 
 test("round-trips through stringify", () => {
   const source = [
-    "= main #clear #set generator = off",
+    "= main #clear #set generator = \"off\"",
     "  GRETA BASE #title",
     "  Generator: {generator}",
     "  Type \\-> or \\# or \\{ to go on",
     "  \\* not a choice",
     "  C:\\Users\\theor",
     "  * Diagnostics -> diagnostics",
-    "  * Toggle generator #set generator = spinning up",
+    "  * Toggle generator #set generator = \"spinning up\"",
     "    Generator online. #delay 800",
     "    -> main",
     "",

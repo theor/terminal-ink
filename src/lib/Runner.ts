@@ -6,7 +6,8 @@ import {
   type Story,
   type Tag,
 } from "./Parser.ts";
-import { tagSpec } from "./tags.ts";
+import { tagSpec, type Vars } from "./tags.ts";
+import { formatValue } from "./expr.ts";
 
 /**
  * One thing to show. `text: null` is a line that prints nothing and exists
@@ -74,7 +75,7 @@ function headerTagsOf(screen: Screen): Tag[] {
 
 export class Runner {
   readonly story: Story;
-  readonly vars = new Map<string, string>();
+  readonly vars: Vars = new Map();
 
   /** Screens the player has navigated into; the last one is current. */
   private stack: Screen[] = [];
@@ -339,9 +340,11 @@ export class Runner {
   /** Substitutes `{var}`; an unset variable is left visible as written. */
   private render(segments: Segment[]): string {
     return segments
-      .map((s) =>
-        s.kind === "text" ? s.value : this.vars.get(s.name) ?? `{${s.name}}`
-      )
+      .map((s) => {
+        if (s.kind === "text") return s.value;
+        const value = this.vars.get(s.name);
+        return value ? formatValue(value) : `{${s.name}}`;
+      })
       .join("");
   }
 

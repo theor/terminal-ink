@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "./Parser.ts";
 import { Runner, type Output, type StepResult } from "./Runner.ts";
+import { num, str } from "./expr.ts";
 
 function runner(source: string) {
   const story = parse(source);
@@ -30,7 +31,7 @@ test("runs a block and offers its choices", () => {
 });
 
 test("substitutes variables, and leaves unset ones visible", () => {
-  const r = runner("= main\n#set mode = SAFE\nMode: {mode} / {missing}\n* ok\n");
+  const r = runner("= main\n#set mode = \"SAFE\"\nMode: {mode} / {missing}\n* ok\n");
   assert.deepEqual(lines(r.start()), ["Mode: SAFE / {missing}"]);
 });
 
@@ -39,38 +40,38 @@ test("substitutes variables, and leaves unset ones visible", () => {
 test("#set assigns from every position a tag may sit", () => {
   const r = runner(
     [
-      "= main #set a = header",
-      "#set b = own line",
-      "Printed #set c = text line",
-      "* Pick #set d = choice",
+      "= main #set a = \"header\"",
+      "#set b = \"own line\"",
+      "Printed #set c = \"text line\"",
+      "* Pick #set d = \"choice\"",
     ].join("\n")
   );
   const step = r.start();
   assert.deepEqual(lines(step), ["Printed"], "a #set line prints nothing of its own");
   assert.deepEqual(
     ["a", "b", "c"].map((k) => r.vars.get(k)),
-    ["header", "own line", "text line"]
+    [str("header"), str("own line"), str("text line")]
   );
   assert.equal(r.vars.get("d"), undefined, "a choice's #set waits until it is picked");
 
   r.select(0);
-  assert.equal(r.vars.get("d"), "choice");
+  assert.deepEqual(r.vars.get("d"), str("choice"));
 });
 
 test("a value may hold spaces", () => {
-  const r = runner("= main\n#set candle = burning bright\n{candle}\n* ok\n");
+  const r = runner("= main\n#set candle = \"burning bright\"\n{candle}\n* ok\n");
   assert.deepEqual(lines(r.start()), ["burning bright"]);
 });
 
 test("a #set runs before the line it sits on is printed", () => {
   // Same order as #clear, so a line can assert a new state and display it.
-  const r = runner("= main\nGenerator: {generator} #set generator = on\n* ok\n");
+  const r = runner("= main\nGenerator: {generator} #set generator = \"on\"\n* ok\n");
   assert.deepEqual(lines(r.start()), ["Generator: on"]);
 });
 
 test("a #set on a choice runs before the choice's body", () => {
   const r = runner(
-    ["= main", "* Toggle #set generator = on", "  Generator: {generator}"].join("\n")
+    ["= main", "* Toggle #set generator = \"on\"", "  Generator: {generator}"].join("\n")
   );
   r.start();
   assert.ok(lines(r.select(0)).includes("Generator: on"));
@@ -81,7 +82,7 @@ test("a #set on a block header re-runs on every redraw", () => {
   // assignment re-initialises the block every time it is drawn, so it belongs
   // on a block you divert away from, not on a menu you come back to.
   const r = runner(
-    ["= main #set generator = off", "Generator: {generator}", "* Toggle #set generator = on"].join("\n")
+    ["= main #set generator = \"off\"", "Generator: {generator}", "* Toggle #set generator = \"on\""].join("\n")
   );
   r.start();
   assert.deepEqual(lines(r.select(0)), ["Generator: off"]);
@@ -89,7 +90,7 @@ test("a #set on a block header re-runs on every redraw", () => {
 
 test("a #set outside the redrawn screen keeps its value", () => {
   const r = runner(
-    ["= boot #set generator = off", "-> main", "= main", "Generator: {generator}", "* Toggle #set generator = on"].join("\n")
+    ["= boot #set generator = \"off\"", "-> main", "= main", "Generator: {generator}", "* Toggle #set generator = \"on\""].join("\n")
   );
   r.start();
   assert.deepEqual(lines(r.select(0)), ["Generator: on"], "main has no #set to undo it");
@@ -109,8 +110,8 @@ test("#if keeps a line off the screen until it matches", () => {
   const source = [
     "= main",
     "Reactor nominal",
-    "ALARM: COOLANT LOW #if coolant = low",
-    "* Vent coolant #set coolant = low",
+    "ALARM: COOLANT LOW #if coolant = \"low\"",
+    "* Vent coolant #set coolant = \"low\"",
   ].join("\n");
   const r = runner(source);
   assert.deepEqual(lines(r.start()), ["Reactor nominal"]);
@@ -119,7 +120,7 @@ test("#if keeps a line off the screen until it matches", () => {
 
 test("#if hides a choice rather than blanking it", () => {
   const r = runner(
-    ["= main", "* Vent #set coolant = low", "* Purge #if coolant = low"].join("\n")
+    ["= main", "* Vent #set coolant = \"low\"", "* Purge #if coolant = \"low\""].join("\n")
   );
   assert.deepEqual(labels(r.start()), ["Vent"]);
   assert.deepEqual(labels(r.select(0)), ["Vent", "Purge"]);
@@ -132,7 +133,7 @@ test("a hidden choice does not renumber the ones around it", () => {
     [
       "= main",
       "* First -> first",
-      "* Hidden -> hidden #if never = yes",
+      "* Hidden -> hidden #if never = \"yes\"",
       "* Third -> third",
       "= first",
       "One",
@@ -151,7 +152,7 @@ test("a hidden choice does not renumber the ones around it", () => {
 
 test("#if suppresses everything else written on its line", () => {
   const r = runner(
-    ["= main", "Locked #set opened = yes #if key = found", "{opened}", "* ok"].join("\n")
+    ["= main", "Locked #set opened = \"yes\" #if key = \"found\"", "{opened}", "* ok"].join("\n")
   );
   assert.deepEqual(lines(r.start()), ["{opened}"], "the #set went with the line");
 });
@@ -159,8 +160,8 @@ test("#if suppresses everything else written on its line", () => {
 test("#if on a divert chooses whether the story goes there", () => {
   const source = [
     "= main",
-    "#set coolant = low",
-    "-> purge #if coolant = low",
+    "#set coolant = \"low\"",
+    "-> purge #if coolant = \"low\"",
     "Nothing happens",
     "* ok",
     "= purge",
@@ -169,12 +170,12 @@ test("#if on a divert chooses whether the story goes there", () => {
   ].join("\n");
   assert.deepEqual(lines(runner(source).start()), ["PURGING"]);
 
-  const cold = runner(source.replace("#set coolant = low", "#set coolant = fine"));
+  const cold = runner(source.replace("#set coolant = \"low\"", "#set coolant = \"fine\""));
   assert.deepEqual(lines(cold.start()), ["Nothing happens"]);
 });
 
 test("#if on a bare directive line conditions the directive", () => {
-  const r = runner(["= main", "Kept", "#clear #if wipe = yes", "* ok"].join("\n"));
+  const r = runner(["= main", "Kept", "#clear #if wipe = \"yes\"", "* ok"].join("\n"));
   assert.ok(
     !r.start().outputs.some((o) => o.tags.some((t) => t.name === "clear")),
     "the #clear is skipped along with the line"
@@ -184,13 +185,13 @@ test("#if on a bare directive line conditions the directive", () => {
 test("an unset variable matches nothing", () => {
   // Not even the word "unset" -- there is no value there to compare against.
   const r = runner(
-    ["= main", "Hidden #if flag = unset", "Also hidden #if flag = ready", "Shown", "* ok"].join("\n")
+    ["= main", "Hidden #if flag = \"unset\"", "Also hidden #if flag = \"ready\"", "Shown", "* ok"].join("\n")
   );
   assert.deepEqual(lines(r.start()), ["Shown"]);
 });
 
 test("a screen whose every choice is hidden halts", () => {
-  const r = runner(["= main", "Done", "* Never #if a = b"].join("\n"));
+  const r = runner(["= main", "Done", "* Never #if a = \"b\""].join("\n"));
   const step = r.start();
   assert.deepEqual(labels(step), []);
   assert.equal(step.halted, true);
@@ -250,7 +251,7 @@ test("a divert cycle is cut off instead of hanging", () => {
 
 test("a plain choice redraws the screen without growing the stack", () => {
   const r = runner(
-    ["= main #clear", "Generator: {generator}", "* Toggle", "  #set generator = on"].join("\n")
+    ["= main #clear", "Generator: {generator}", "* Toggle", "  #set generator = \"on\""].join("\n")
   );
   r.start();
   const depth = r.depth;
@@ -267,7 +268,7 @@ test("a set at block level re-runs on every redraw", () => {
   // initialisation belongs in a block you divert away from, not in the menu
   // you return to.
   const r = runner(
-    ["= main", "#set generator = off", "Generator: {generator}", "* Toggle", "  #set generator = on"].join("\n")
+    ["= main", "#set generator = \"off\"", "Generator: {generator}", "* Toggle", "  #set generator = \"on\""].join("\n")
   );
   r.start();
   assert.deepEqual(lines(r.select(0)), ["Generator: off"]);
@@ -305,7 +306,7 @@ test("an inline divert on a choice runs its body first", () => {
   r.start();
   const step = r.select(0);
   assert.deepEqual(lines(step), ["Leaving", "Arrived"]);
-  assert.equal(r.vars.get("flag"), "1");
+  assert.deepEqual(r.vars.get("flag"), num(1), "an unquoted 1 is the number 1");
 });
 
 // --- gates ----------------------------------------------------------------
@@ -369,6 +370,9 @@ test("a full path through story.term", () => {
   assert.ok(lines(diagnostics).includes("Generator [off]"));
   assert.ok(lines(diagnostics).includes("WARNING: MAIN BUS UNDERVOLT"), "#if matches");
 
+  assert.ok(lines(diagnostics).includes("Core load [34%]"), "a number prints without quotes");
+  assert.ok(!lines(diagnostics).includes("CAUTION: CORE LOAD HIGH"), "34 is not over 80");
+
   const toggled = r.select(0);
   assert.equal(r.currentBlock?.name, "diagnostics", "toggling stays put");
   assert.ok(lines(toggled).includes("Generator spinning up..."));
@@ -377,8 +381,11 @@ test("a full path through story.term", () => {
     !lines(toggled).includes("WARNING: MAIN BUS UNDERVOLT"),
     "and the warning goes with it"
   );
+  assert.ok(lines(toggled).includes("Core load [89%]"), "34 + 55, done as arithmetic");
+  assert.ok(lines(toggled).includes("CAUTION: CORE LOAD HIGH"), "89 is over 80");
+  assert.deepEqual(labels(toggled), ["Back"], "the spent choice hides itself");
 
-  const back = r.select(1);
+  const back = r.select(0);
   assert.equal(r.currentBlock?.name, "main");
   assert.ok(lines(back).includes("Generator: on"), "state survives the trip back");
   assert.deepEqual(labels(back), ["Diagnostics", "Controls", "Comms", "Reboot"]);
@@ -402,7 +409,7 @@ test("grimoire.term parses, and its multi-word value survives", () => {
   assert.deepEqual(labels(candle), ["Pinch it out", "Trim the wick", "Leave it"]);
 
   const trimmed = r.select(1); // Trim the wick -- a value with a space in it
-  assert.equal(r.vars.get("candle"), "burning bright");
+  assert.deepEqual(r.vars.get("candle"), str("burning bright"));
   assert.ok(lines(trimmed).includes("The flame steadies."));
 
   assert.ok(

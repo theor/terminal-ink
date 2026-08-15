@@ -9,6 +9,7 @@ write with it.
 - [Blocks and flow](#blocks-and-flow)
 - [Screens, redraws and sub-menus](#screens-redraws-and-sub-menus)
 - [Variables](#variables)
+- [Expressions](#expressions)
 - [Tags](#tags) — every `#pound` directive
 - [Themes](#themes)
 - [What the format does not have](#what-the-format-does-not-have)
@@ -32,7 +33,7 @@ are on.
 GRETA BASE #title
 Generator: {generator}
 * Diagnostics -> diagnostics
-* Toggle generator #set generator = on
+* Toggle generator #set generator = "on"
   Generator spinning up... #delay 800
 * Reboot -> boot
 ```
@@ -206,26 +207,35 @@ it was. If a change needs to refresh the whole screen, divert to a block
 ## Variables
 
 Assignment is the `#set` tag, so it can sit on a line of its own or ride on any
-other line:
+other line. What follows the `=` is an [expression](#expressions):
 
 ```
-#set generator = on
-#set candle = burning bright
+#set generator = "on"
+#set candle = "burning bright"
+#set load = 34
+#set load = load + 55
 Generator: {generator}
-* Toggle generator #set generator = on
+* Toggle generator #set generator = "on"
 ```
 
-- Values are **strings**, taken from after the `=` to the end of the line (or to
-  the next tag) and trimmed. Spaces are kept, so `burning bright` is one value.
-  Quotes are not syntax; they would be part of the value, and so would a trailing
-  `//` — a comment only comments when it *starts* the line.
+**Text goes in quotes.** A bare word is a *variable*, so `#set candle = lit`
+reads `lit` as a variable — almost certainly unset — rather than as the word.
+Write `"lit"`.
+
+- A value is a **number**, a **string** or a **boolean**, and it keeps that
+  identity: `#set n = 1` stores the number 1, and `#set n = "1"` stores the text
+  `1`. The two are never equal to each other.
 - `{name}` substitutes. An **unset** variable prints literally as `{name}`,
   which makes a typo visible on screen rather than silently blank.
+- Numbers print without trailing floating-point noise — `0.1 + 0.2` prints as
+  `0.3` — and booleans print as `true` or `false`.
 - Choice labels interpolate too: `* Take the {weapon}`.
 - Variables are global, and cleared when the story restarts.
 - A `#set` runs **before the line it sits on prints**, the same order `#clear`
-  runs in — so `Generator: {generator} #set generator = on` prints `Generator:
-  on`.
+  runs in — so `Generator: {generator} #set generator = "on"` prints
+  `Generator: on`.
+- A `#set` whose expression has [no answer](#no-answer) leaves the variable
+  alone rather than storing a hole.
 
 **A `#set` runs every time it is executed — redraws included.** On a block
 header it therefore re-initialises the block on every redraw, undoing whatever
@@ -233,9 +243,9 @@ the menu just changed:
 
 ```
 // WRONG: the header runs again on every redraw, undoing the toggle
-= main #set generator = off
+= main #set generator = "off"
 Generator: {generator}
-* Toggle #set generator = on
+* Toggle #set generator = "on"
 ```
 
 Initialise in a block you divert *away* from (like `boot`), not in a menu you
@@ -251,6 +261,50 @@ set generator = on
 
 That line is output, not a state change — useful for a terminal that echoes
 commands back at the player.
+
+## Expressions
+
+`#set` and `#if` take an expression. Nothing else does — a tag's arguments are
+plain words unless the tag says otherwise.
+
+| | |
+| --- | --- |
+| `coolant`, `core_temp` | a **variable** — a bare word is always a variable |
+| `"low"`, `"burning bright"` | a **string**, in double quotes |
+| `34`, `-2`, `41.5` | a **number** |
+| `true`, `false` | a **boolean** |
+| `+ - * /` | arithmetic. `+` also joins two strings |
+| `= != < <= > >=` | comparison. Ordering is for numbers only |
+| `and`, `or`, `not` | combine conditions |
+| `( )` | grouping |
+
+```
+#if load > 80
+#if coolant = "low" and not vented
+#if x < (3 + y)
+#set load = load + 55
+#set label = "BAY " + wing
+```
+
+- Precedence runs the usual way: `*` and `/` before `+` and `-`, arithmetic
+  before comparison, comparison before `and`, `and` before `or`. Parentheses
+  override it.
+- **Values of different kinds are never equal.** `#if load = "34"` is false when
+  `load` holds the number 34.
+- A string cannot contain `#` or `->`, because a tag's arguments end there — so
+  `#if name = "C# programmer"` cannot be written.
+- `and` and `or` settle what they can: `#if false_thing and missing` is false
+  rather than no answer, because the missing half cannot change the outcome.
+
+### No answer
+
+An expression has **no answer** when it asks something unanswerable: an unset
+variable, ordering two strings, `"a" + 1`, dividing by zero. No answer spreads —
+anything built on it is also no answer — and it is never a yes, so a `#if` on it
+does not run and a `#set` on it leaves the variable alone.
+
+This is the same rule as the older "an unset variable matches nothing", widened
+to every operator: the format would rather do nothing visible than guess.
 
 ## Tags
 
@@ -287,16 +341,17 @@ Two tags are restricted, because the missing positions would have no meaning:
 cannot sit on a **block header**. Writing them elsewhere is an error rather
 than a silent no-op.
 
-### `#set <name> = <value>`
+### `#set <name> = <expression>`
 
-Assigns a variable. The value runs to the end of the line or to the next tag,
-and keeps its spaces:
+Assigns a variable. Everything after the `=` is an
+[expression](#expressions) — so text needs quotes, and arithmetic works:
 
 ```
-#set generator = on
-#set candle = burning bright
-Generator online #set generator = on
-* Toggle generator #set generator = on
+#set generator = "on"
+#set candle = "burning bright"
+#set load = load + 55
+Generator online #set generator = "on"
+* Toggle generator #set generator = "on"
 ```
 
 - It runs **before** the line it sits on prints, so a `{var}` on that same line
@@ -305,47 +360,44 @@ Generator online #set generator = on
   common "choice whose only body is an assignment" into one line.
 - On a **block header** it re-runs on every redraw — see
   [Variables](#variables) for why that is usually the wrong place for it.
-- A `#set` that is not an assignment (`#set x`, `#set x = `) is an **error**,
-  not an inert tag.
-- A value may contain spaces, but not `#` or `->` — those end the arguments,
-  and escapes do not reach inside them. `#set colour = \#ff0000` does not work.
+- A `#set` that is not an assignment (`#set x`, `#set x = `), or whose
+  expression does not parse, is an **error** rather than an inert tag.
+- The expression cannot contain `#` or `->` — those end the tag's arguments,
+  and escapes do not reach inside them. `#set colour = "\#ff0000"` does not work.
 
-### `#if <name> = <value>`
+### `#if <expression>`
 
-Runs the line only when the variable holds that value. On a line of text it
-decides whether the line prints; on a choice it decides whether the choice is
-**offered at all**:
+Runs the line only when the expression is true. On a line of text it decides
+whether the line prints; on a choice it decides whether the choice is **offered
+at all**:
 
 ```
 = main
 Reactor nominal
-ALARM: COOLANT LOW #if coolant = low
-* Vent coolant #set coolant = low
-* Emergency purge -> purge #if coolant = low
+ALARM: COOLANT LOW #if coolant = "low"
+CAUTION: CORE LOAD HIGH #if load > 80
+* Vent coolant #set coolant = "low"
+* Emergency purge -> purge #if coolant = "low" and load < 90
 ```
 
 The inline divert comes **before** the tags, as it always does. The other way
-round, the `-> purge` would be read as part of the value — so the line is
+round, the `-> purge` would be read as part of the expression — so the line is
 rejected rather than quietly never matching.
 
 - A hidden choice is **gone from the menu**, not blanked — and the choices
   around it keep working, because the runner tracks them by their position in
   the source rather than in the menu.
-- On a **divert** it decides whether the story goes there: `-> purge #if
-  coolant = low` jumps when it matches and carries on down the block when it
-  does not. That is the one way flow depends on state.
+- On a **divert** it decides whether the story goes there: `-> purge #if coolant
+  = "low"` jumps when it matches and carries on down the block when it does not.
+  That is the one way flow depends on state.
 - It suppresses **everything else written on the line**, so a `#set` beside a
-  false `#if` does not run either.
-- An **unset** variable matches nothing — not even the empty string. There is
-  no value there to compare against.
-- The comparison is exact and case-sensitive: `#if candle = lit` and `#set
-  candle = Lit` do not match.
+  false `#if` does not run either. That is how a choice spends itself:
+  `* Toggle #if generator = "off" #set generator = "on"`.
+- Only a plain **yes** runs the line. [No answer](#no-answer) is not a yes, and
+  neither is a value that is not a yes or no — `#if candle` is false even when
+  `candle` holds `"lit"`. Write `#if candle = "lit"`.
 - Not allowed on a **block header**, where suppressing "the screen" has no
   sensible meaning.
-
-There is no `!=`, no `>` and no `or`. If you need the opposite of a condition,
-set the variable to both values you care about (`open` / `shut`) and test for
-the one you want, rather than testing for the absence of the other.
 
 ### `#clear`
 
@@ -450,14 +502,15 @@ edit to `Terminal.svelte`.
 
 Deliberately, so you stop looking:
 
-- **No conditions beyond `#if name = value`.** No `!=`, no `>`, no `and` or
-  `or`, and no nesting — a condition is one variable against one literal, and a
-  line either carries one or it does not.
-- **No arithmetic.** Values are strings; `#set n = 1` then `#set n = 2`, not
-  `n + 1`.
-- **No expressions in `{...}`** — a variable name and nothing else.
-- **No functions, includes, or multi-file stories.**
+- **No expressions in `{...}`** — a variable name and nothing else. Compute it
+  with `#set` on the line above and print the result.
+- **One condition per line.** A line carries at most one `#if`; there is no
+  `else`, and no block that several lines sit inside. Repeat the condition, or
+  divert to a block.
+- **No functions, no loops, no lists, no includes, no multi-file stories.**
 - **No inline styling** beyond `#title`.
+- **No string operations** beyond joining two with `+`. No length, no slicing,
+  no case conversion.
 
 Branching is still mostly player-driven: the player picks the choice that
 diverts. `#if` narrows what is on offer, it does not run the story on its own.
@@ -473,9 +526,10 @@ The parser reports:
 - a line matching no form (`= 9lives`, `->`, `* Go #set x = 1 -> there`)
 - `Duplicate block name "x"`
 - `Unknown block "x"` — a divert whose target does not exist
-- ``#set is written as `#set name = value` `` — a tag whose arguments are not
-  what it wants: too few, too many, or a missing `=`. Every tag in `tags.ts`
-  carries the line quoted back at you here.
+- ``#set is written as `#set name = <expression>` `` — a tag whose arguments are
+  not what it wants: too few, too many, a missing `=`, or an expression that
+  does not parse (`#if x <`). Every tag in `tags.ts` carries the line quoted
+  back at you here.
 - `#title does nothing on a block header` — a tag in a position where it would
   have no effect
 
@@ -531,6 +585,34 @@ Terminal {
   ident  = (letter | "_") (alnum | "_")*
   indent = hs*
   hs     = " " | "\t"
+
+  // Matched on their own, from `Expr`, never as part of a line.
+  Expr     = OrExpr
+  OrExpr   = OrExpr "or" AndExpr    -- or
+           | AndExpr
+  AndExpr  = AndExpr "and" NotExpr  -- and
+           | NotExpr
+  NotExpr  = "not" NotExpr          -- not
+           | CompExpr
+  CompExpr = AddExpr compOp AddExpr -- compare
+           | AddExpr
+  AddExpr  = AddExpr addOp MulExpr  -- add
+           | MulExpr
+  MulExpr  = MulExpr mulOp Unary    -- mul
+           | Unary
+  Unary    = "-" Unary              -- negate
+           | Primary
+  Primary  = "(" Expr ")"           -- paren
+           | number | string | boolean | varRef
+
+  compOp  = "!=" | "<=" | ">=" | "<" | ">" | "="
+  addOp   = "+" | "-"
+  mulOp   = "*" | "/"
+  number  = digit+ ("." digit+)?
+  string  = "\"" (~"\"" any)* "\""
+  boolean = ("true" | "false") ~alnum
+  varRef  = ~keyword ident
+  keyword = ("and" | "or" | "not" | "true" | "false") ~(alnum | "_")
 }
 ```
 
@@ -548,7 +630,12 @@ Four pieces are worth knowing when reading it:
   rule here, no regeneration.
 - `argToken` stopping at `->` is what keeps `#set x = 1 -> there` from
   swallowing an inline divert. It stops at `#` too, which is why a tag's
-  arguments end where the next tag begins.
+  arguments end where the next tag begins — and why a string cannot hold either.
+- The expression rules are **matched from `Expr`, never from `line`**. A tag
+  that wants an expression joins its arguments back into one string and parses
+  that, so `#if x < (3 + y)` needs nothing from the line grammar. Being
+  capitalised makes them syntactic rules, so Ohm skips the spaces between
+  operands.
 
 The escapable list is mirrored by `ESCAPABLE` in `Parser.ts`; change both
 together.

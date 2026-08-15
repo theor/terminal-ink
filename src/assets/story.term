@@ -1,6 +1,6 @@
 // Ported from story.ink. This is the Mothership session terminal.
 
-= boot #speed 5 #set generator = off
+= boot #speed 5 #set generator = "off" #set load = 34
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20
 Copyright (C) 2981, 2987 Reythorne Corp. /
@@ -40,8 +40,10 @@ Generator: {generator}
 DIAGNOSTICS #title
 Generator [{generator}]
 Backup generator [off]
-WARNING: MAIN BUS UNDERVOLT #if generator = off
-* Toggle generator #set generator = on
+Core load [{load}%]
+WARNING: MAIN BUS UNDERVOLT #if generator = "off"
+CAUTION: CORE LOAD HIGH #if load > 80
+* Toggle generator #if generator = "off" #set generator = "on" #set load = load + 55
   Generator spinning up... #delay 800
 * Back -> back
 

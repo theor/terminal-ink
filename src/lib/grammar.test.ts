@@ -42,7 +42,7 @@ test("classifies each kind of line", () => {
   assert.equal(ruleOf("= boot"), "blockLine");
   assert.equal(ruleOf("  * Diagnostics"), "choiceLine");
   assert.equal(ruleOf("  -> main"), "divertLine");
-  assert.equal(ruleOf("  #set generator = on"), "tagLine");
+  assert.equal(ruleOf("  #set generator = \"on\""), "tagLine");
   assert.equal(ruleOf("  Reactor nominal"), "textLine");
   assert.equal(ruleOf("  #clear"), "tagLine");
   assert.equal(ruleOf("  // note to self"), "commentLine");
@@ -62,25 +62,25 @@ test("prose that looks like an assignment is printed, not executed", () => {
 });
 
 test("accepts #set in every position a tag may sit", () => {
-  assert.ok(accepts("#set generator = on"), "on its own line");
-  assert.ok(accepts("= main #set generator = on"), "on a block header");
-  assert.ok(accepts("Generator online #set generator = on"), "on a text line");
-  assert.ok(accepts("* Toggle #set generator = on"), "on a choice");
-  assert.ok(accepts("* Toggle -> main #set generator = on"), "after an inline divert");
-  assert.ok(accepts("-> main #set generator = on"), "on a divert");
+  assert.ok(accepts("#set generator = \"on\""), "on its own line");
+  assert.ok(accepts("= main #set generator = \"on\""), "on a block header");
+  assert.ok(accepts("Generator online #set generator = \"on\""), "on a text line");
+  assert.ok(accepts("* Toggle #set generator = \"on\""), "on a choice");
+  assert.ok(accepts("* Toggle -> main #set generator = \"on\""), "after an inline divert");
+  assert.ok(accepts("-> main #set generator = \"on\""), "on a divert");
 });
 
 test("a #set value may hold spaces, and stops at the next tag", () => {
-  assert.ok(accepts("#set candle = burning bright"));
-  assert.ok(accepts("#set candle = burning bright #delay 100"));
+  assert.ok(accepts("#set candle = \"burning bright\""));
+  assert.ok(accepts("#set candle = \"burning bright\" #delay 100"));
 });
 
 test("an argument does not swallow an inline divert", () => {
   // The arrow comes first on a choice. Written the other way round the value
   // would quietly become "low -> purge" and never match anything, so the line
   // has to fail instead.
-  assert.ok(!accepts("* Purge #if coolant = low -> purge"), "divert after the tag");
-  assert.ok(accepts("* Purge -> purge #if coolant = low"), "divert before it");
+  assert.ok(!accepts("* Purge #if coolant = \"low -> purge\""), "divert after the tag");
+  assert.ok(accepts("* Purge -> purge #if coolant = \"low\""), "divert before it");
 });
 
 test("the grammar knows no tag names, and no per-tag structure", () => {
@@ -93,7 +93,7 @@ test("the grammar knows no tag names, and no per-tag structure", () => {
 });
 
 test("every tag is read the same way: a name and its arguments", () => {
-  assert.deepEqual(argsOf("#set generator = on"), ["generator", "=", "on"]);
+  assert.deepEqual(argsOf("#set generator = \"on\""), ["generator", "=", '"on"']);
   assert.deepEqual(argsOf("#password sable"), ["sable"]);
   assert.deepEqual(argsOf("#speed 40"), ["40"]);
   assert.deepEqual(argsOf("#delay 8=00"), ["8=00"], "an = is not special");

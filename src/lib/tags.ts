@@ -15,7 +15,15 @@
  * Adding a tag means adding an entry here.
  */
 
-export type Vars = Map<string, string>;
+import { evaluate, parseExpr, type Expr, type Value } from "./expr.ts";
+
+export type Vars = Map<string, Value>;
+
+/** `#set name = <expression>` and `#if <expression>` bind to these. */
+export interface Assignment {
+  name: string;
+  value: Expr;
+}
 
 /** Where a tag is written. A spec may restrict itself to some of these. */
 export type TagPosition = "header" | "text" | "own" | "choice" | "divert";
@@ -44,26 +52,33 @@ export interface TerminalUI {
  * knows about its own syntax lives in here, which is why the grammar can treat
  * every tag alike.
  */
-export type Bind = (args: string[]) => string[] | null;
+export type Bind<T> = (args: string[]) => T | null;
 
 /** Takes between `min` and `max` arguments, and passes them through. */
 const count =
-  (min: number, max = min): Bind =>
+  (min: number, max = min): Bind<string[]> =>
   (args) =>
     args.length >= min && args.length <= max ? args : null;
 
 /**
- * `name = value`, shared by `#set` and `#if`. The `=` is not structure the
- * parser knows about -- it is an argument like any other, checked here -- and
- * the value is whatever follows, so it may hold spaces.
+ * `name = <expression>`. The `=` is not structure the parser knows about -- it
+ * is an argument like any other, checked here -- and everything after it is
+ * joined back up and parsed as an expression.
  */
-const assignment: Bind = (args) =>
-  args.length >= 3 && args[1] === "=" ? [args[0], args.slice(2).join(" ")] : null;
+const assignment: Bind<Assignment> = (args) => {
+  if (args.length < 3 || args[1] !== "=") return null;
+  const value = parseExpr(args.slice(2).join(" "));
+  return value ? { name: args[0], value } : null;
+};
 
-export interface TagSpec {
+/** `#if <expression>`, which is every argument joined back up. */
+const condition: Bind<Expr> = (args) =>
+  args.length > 0 ? parseExpr(args.join(" ")) : null;
+
+export interface TagSpec<T = any> {
   name: string;
   /** How the arguments are read. See `Bind`. */
-  bind: Bind;
+  bind: Bind<T>;
   /** Positions the tag means something in. Everywhere, by default. */
   positions?: TagPosition[];
   /** How to write it, quoted back at the author when they get it wrong. */
@@ -72,12 +87,12 @@ export interface TagSpec {
    * Changes story state. Runs before the line it sits on is rendered. Takes
    * the values `bind` returned, not the raw arguments.
    */
-  apply?: (vars: Vars, values: string[]) => void;
+  apply?: (vars: Vars, values: T) => void;
   /**
    * Decides whether the line runs at all. A false answer skips the line and
    * everything else on it, and hides a choice rather than blanking its label.
    */
-  allows?: (vars: Vars, values: string[]) => boolean;
+  allows?: (vars: Vars, values: T) => boolean;
   /** Stops the runner until the player answers. */
   gate?: boolean;
   /**
@@ -86,7 +101,7 @@ export interface TagSpec {
    */
   view?: {
     phase: "before" | "after";
-    run: (ui: TerminalUI, values: string[]) => void | Promise<void>;
+    run: (ui: TerminalUI, values: T) => void | Promise<void>;
   };
 }
 
@@ -94,19 +109,29 @@ export const TAGS: TagSpec[] = [
   {
     name: "set",
     bind: assignment,
-    syntax: "#set name = value",
-    apply: (vars, [name, value]) => vars.set(name, value),
+    syntax: '#set name = <expression>, e.g. #set candle = "lit"',
+    apply: (vars, { name, value }) => {
+      // An expression with no answer leaves the variable alone rather than
+      // storing a hole -- unset stays unset, which is a state the rest of the
+      // format already knows how to talk about.
+      const result = evaluate(value, vars);
+      if (result) vars.set(name, result);
+    },
   },
   {
     name: "if",
-    bind: assignment,
+    bind: condition,
     // Not on a block header: there is no sensible answer to what suppressing
     // a whole screen would mean, and the header runs again on every redraw.
     positions: ["text", "own", "choice", "divert"],
-    syntax: "#if name = value",
-    // An unset variable matches nothing, the same way it prints as `{name}`
-    // rather than as blank -- a value that was never set is visibly not there.
-    allows: (vars, [name, value]) => vars.get(name) === value,
+    syntax: '#if <expression>, e.g. #if coolant = "low"',
+    // Only a plain yes runs the line. An unset variable, or an operator with
+    // nothing to say about the types it was given, is no answer -- and no
+    // answer is not a yes.
+    allows: (vars, expr) => {
+      const result = evaluate(expr, vars);
+      return result?.kind === "boolean" && result.value;
+    },
   },
   {
     name: "clear",
@@ -180,6 +205,6 @@ export function positionsOf(spec: TagSpec): TagPosition[] {
  * Everything that acts on a tag goes through here, so a malformed one does
  * nothing instead of doing something odd with the wrong arguments.
  */
-export function tagValues(name: string, args: string[]): string[] | null {
+export function tagValues(name: string, args: string[]): unknown | null {
   return tagSpec(name)?.bind(args) ?? null;
 }

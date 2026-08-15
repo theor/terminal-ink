@@ -9,6 +9,7 @@ import {
   type TerminalUI,
   type Vars,
 } from "./tags.ts";
+import { parseExpr, str } from "./expr.ts";
 
 /** Records what the tags asked the display to do, in order. */
 function fakeUI() {
@@ -58,13 +59,27 @@ test("every tag declares how it is written, and rejects what it is not", () => {
   }
 });
 
-test("an assignment needs its = and keeps the rest as one value", () => {
-  assert.deepEqual(tagValues("set", ["x", "=", "a", "b"]), ["x", "a b"]);
-  assert.deepEqual(tagValues("if", ["x", "=", "a", "b"]), ["x", "a b"]);
+test("an assignment needs its =, and parses the rest as an expression", () => {
+  assert.deepEqual(tagValues("set", ["x", "=", '"a', 'b"']), {
+    name: "x",
+    value: { kind: "string", value: "a b" },
+  });
   assert.equal(tagValues("set", ["x", "a"]), null, "no =");
   assert.equal(tagValues("set", ["x", "="]), null, "no value");
   assert.equal(tagValues("set", ["x"]), null);
+  assert.equal(tagValues("set", ["x", "=", "1", "+"]), null, "a broken expression");
   assert.equal(tagValues("nonsense", ["x", "=", "y"]), null, "unknown tag");
+});
+
+test("#if binds to the whole expression, with no name in front", () => {
+  assert.deepEqual(tagValues("if", ["x", "<", "3"]), {
+    kind: "binary",
+    op: "<",
+    left: { kind: "var", name: "x" },
+    right: { kind: "number", value: 3 },
+  });
+  assert.equal(tagValues("if", []), null);
+  assert.equal(tagValues("if", ["x", "<"]), null);
 });
 
 test("a tag does something, or it should not be in the registry", () => {
@@ -111,8 +126,8 @@ test("#set is the tag that changes story state", () => {
   assert.deepEqual(stateful, ["set"]);
 
   const vars: Vars = new Map();
-  tagSpec("set")!.apply!(vars, ["candle", "burning bright"]);
-  assert.equal(vars.get("candle"), "burning bright");
+  tagSpec("set")!.apply!(vars, tagValues("set", ["candle", "=", '"burning', 'bright"']));
+  assert.deepEqual(vars.get("candle"), { kind: "string", value: "burning bright" });
 });
 
 test("#password is the tag that gates", () => {
@@ -136,8 +151,11 @@ test("#if is the tag that decides whether a line runs", () => {
   assert.deepEqual(deciding, ["if"]);
 
   const allows = tagSpec("if")!.allows!;
-  const vars: Vars = new Map([["coolant", "low"]]);
-  assert.equal(allows(vars, ["coolant", "low"]), true);
-  assert.equal(allows(vars, ["coolant", "fine"]), false);
-  assert.equal(allows(vars, ["missing", "low"]), false, "an unset variable matches nothing");
+  const vars: Vars = new Map([["coolant", str("low")]]);
+  const asks = (src: string) => allows(vars, parseExpr(src)!);
+
+  assert.equal(asks('coolant = "low"'), true);
+  assert.equal(asks('coolant = "fine"'), false);
+  assert.equal(asks('missing = "low"'), false, "an unset variable matches nothing");
+  assert.equal(asks("coolant"), false, "a string is not a yes");
 });
