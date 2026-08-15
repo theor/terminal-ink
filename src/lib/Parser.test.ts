@@ -238,6 +238,17 @@ test("reports a tag written where it does nothing", () => {
   ]);
 });
 
+test("#if is read as a pair, and is rejected on a block header", () => {
+  const b = block("= main\n  ALARM #if coolant = low\n  * ok\n", "main");
+  assert.deepEqual(b.children[0].tags, [
+    { name: "if", pair: true, args: ["coolant", "low"] },
+  ]);
+  assert.deepEqual(
+    parse("= main #if coolant = low\n  * ok\n").errors.map((e) => e.message),
+    ["#if does nothing on a block header"]
+  );
+});
+
 test("an unknown tag stays inert", () => {
   // Only a tag that means something can be written wrongly.
   assert.deepEqual(parse("= main\n  Text #whatever a b c\n  * ok\n").errors, []);

@@ -49,7 +49,7 @@ test("every tag declares how it is written", () => {
 test("a tag does something, or it should not be in the registry", () => {
   for (const spec of TAGS) {
     assert.ok(
-      spec.apply || spec.view || spec.gate,
+      spec.apply || spec.allows || spec.view || spec.gate,
       `${spec.name} is registered but has no effect`
     );
   }
@@ -104,4 +104,19 @@ test("#password is the tag that gates", () => {
 test("a tag restricted to some positions says which", () => {
   assert.deepEqual(positionsOf(tagSpec("title")!), ["text"]);
   assert.equal(positionsOf(tagSpec("set")!).length, 5, "#set works anywhere");
+  assert.ok(
+    !positionsOf(tagSpec("if")!).includes("header"),
+    "#if has no meaning on a block header"
+  );
+});
+
+test("#if is the tag that decides whether a line runs", () => {
+  const deciding = TAGS.filter((s) => s.allows).map((s) => s.name);
+  assert.deepEqual(deciding, ["if"]);
+
+  const allows = tagSpec("if")!.allows!;
+  const vars: Vars = new Map([["coolant", "low"]]);
+  assert.equal(allows(vars, ["coolant", "low"]), true);
+  assert.equal(allows(vars, ["coolant", "fine"]), false);
+  assert.equal(allows(vars, ["missing", "low"]), false, "an unset variable matches nothing");
 });

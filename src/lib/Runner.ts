@@ -219,6 +219,10 @@ export class Runner {
       this.cursor.index++;
       const node = children[index];
 
+      // A line the tags rule out is skipped whole -- including anything else
+      // written on it, so a `#set` beside a false `#if` does not run either.
+      if (node.kind !== "choice" && !this.allowed(node.tags)) continue;
+
       switch (node.kind) {
         case "choice":
           // Collected when the screen is presented, not executed inline.
@@ -249,12 +253,17 @@ export class Runner {
 
   /** The screen is fully drawn: offer whatever choices it holds. */
   private present(screen: Screen) {
+    // `index` stays the position among *all* the screen's choices, because
+    // that is what `select` looks the node back up by -- a choice ruled out by
+    // its tags is dropped from the menu without renumbering the rest.
     this.choices = childrenOf(screen)
       .filter(isChoice)
-      .map((c, index) => ({
+      .map((node, index) => ({ node, index }))
+      .filter(({ node }) => this.allowed(node.tags))
+      .map(({ node, index }) => ({
         index,
-        label: this.render(c.label),
-        tags: c.tags,
+        label: this.render(node.label),
+        tags: node.tags,
       }));
     // A screen with no choices and no divert is the end of the line.
     if (this.choices.length === 0) this.halted = true;
@@ -300,6 +309,19 @@ export class Runner {
    * a block header re-initialises the block each time it is drawn: put one on
    * a block you divert away from, not on a menu you come back to.
    */
+  /**
+   * Whether a line's tags let it run at all -- `#if` today. A tag written in
+   * the wrong shape is ignored here and reported by the parser instead, so a
+   * typo does not silently hide half a screen.
+   */
+  private allowed(tags: Tag[]): boolean {
+    return tags.every((tag) => {
+      const spec = tagSpec(tag.name);
+      if (!spec?.allows || spec.shape !== (tag.pair ? "pair" : "args")) return true;
+      return spec.allows(this.vars, tag.args);
+    });
+  }
+
   private applyTags(tags: Tag[]) {
     for (const tag of tags) {
       const spec = tagSpec(tag.name);

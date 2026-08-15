@@ -74,6 +74,15 @@ test("a #set value may hold spaces, and stops at the next tag", () => {
   assert.ok(accepts("#set candle = burning bright #delay 100"));
 });
 
+test("a pair value does not swallow an inline divert", () => {
+  // The arrow comes first on a choice. Written the other way round the value
+  // would quietly become "low -> purge" and never match anything, so the line
+  // has to fail instead.
+  assert.ok(!accepts("* Purge #if coolant = low -> purge"), "divert after the tag");
+  assert.ok(accepts("* Purge -> purge #if coolant = low"), "divert before it");
+  assert.ok(accepts("#set msg = press \\-> to go on"), "an escaped arrow is a value");
+});
+
 test("the grammar knows the two tag shapes, and no tag names", () => {
   // Whether a name is real, and which shape it should take, is tags.ts's job
   // -- so all of these parse here and are reported by the parser instead.

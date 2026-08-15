@@ -103,6 +103,99 @@ test("a tag on a divert line fires before the jump", () => {
   assert.deepEqual(lines(step), ["Flag: 1"]);
 });
 
+// --- #if ------------------------------------------------------------------
+
+test("#if keeps a line off the screen until it matches", () => {
+  const source = [
+    "= main",
+    "Reactor nominal",
+    "ALARM: COOLANT LOW #if coolant = low",
+    "* Vent coolant #set coolant = low",
+  ].join("\n");
+  const r = runner(source);
+  assert.deepEqual(lines(r.start()), ["Reactor nominal"]);
+  assert.deepEqual(lines(r.select(0)), ["Reactor nominal", "ALARM: COOLANT LOW"]);
+});
+
+test("#if hides a choice rather than blanking it", () => {
+  const r = runner(
+    ["= main", "* Vent #set coolant = low", "* Purge #if coolant = low"].join("\n")
+  );
+  assert.deepEqual(labels(r.start()), ["Vent"]);
+  assert.deepEqual(labels(r.select(0)), ["Vent", "Purge"]);
+});
+
+test("a hidden choice does not renumber the ones around it", () => {
+  // `select` looks the node back up by its position among all the choices, so
+  // dropping one from the middle must not shift what the others select.
+  const r = runner(
+    [
+      "= main",
+      "* First -> first",
+      "* Hidden -> hidden #if never = yes",
+      "* Third -> third",
+      "= first",
+      "One",
+      "* ok",
+      "= hidden",
+      "Two",
+      "* ok",
+      "= third",
+      "Three",
+      "* ok",
+    ].join("\n")
+  );
+  assert.deepEqual(labels(r.start()), ["First", "Third"]);
+  assert.deepEqual(lines(r.select(1)), ["Three"], "the second offered choice is the third");
+});
+
+test("#if suppresses everything else written on its line", () => {
+  const r = runner(
+    ["= main", "Locked #set opened = yes #if key = found", "{opened}", "* ok"].join("\n")
+  );
+  assert.deepEqual(lines(r.start()), ["{opened}"], "the #set went with the line");
+});
+
+test("#if on a divert chooses whether the story goes there", () => {
+  const source = [
+    "= main",
+    "#set coolant = low",
+    "-> purge #if coolant = low",
+    "Nothing happens",
+    "* ok",
+    "= purge",
+    "PURGING",
+    "* ok",
+  ].join("\n");
+  assert.deepEqual(lines(runner(source).start()), ["PURGING"]);
+
+  const cold = runner(source.replace("#set coolant = low", "#set coolant = fine"));
+  assert.deepEqual(lines(cold.start()), ["Nothing happens"]);
+});
+
+test("#if on a bare directive line conditions the directive", () => {
+  const r = runner(["= main", "Kept", "#clear #if wipe = yes", "* ok"].join("\n"));
+  assert.ok(
+    !r.start().outputs.some((o) => o.tags.some((t) => t.name === "clear")),
+    "the #clear is skipped along with the line"
+  );
+});
+
+test("an unset variable matches nothing", () => {
+  // Not even the word "unset" -- there is no value there to compare against.
+  const r = runner(
+    ["= main", "Hidden #if flag = unset", "Also hidden #if flag = ready", "Shown", "* ok"].join("\n")
+  );
+  assert.deepEqual(lines(r.start()), ["Shown"]);
+});
+
+test("a screen whose every choice is hidden halts", () => {
+  const r = runner(["= main", "Done", "* Never #if a = b"].join("\n"));
+  const step = r.start();
+  assert.deepEqual(labels(step), []);
+  assert.equal(step.halted, true);
+});
+
 test("escaped sigils reach the screen as written", () => {
   const r = runner(
     ["= main", "Type \\-> to continue", "\\* not a choice", "C:\\Users\\theor", "* ok"].join("\n")
@@ -274,11 +367,16 @@ test("a full path through story.term", () => {
   assert.equal(r.currentBlock?.name, "diagnostics");
   assert.deepEqual(labels(diagnostics), ["Toggle generator", "Back"]);
   assert.ok(lines(diagnostics).includes("Generator [off]"));
+  assert.ok(lines(diagnostics).includes("WARNING: MAIN BUS UNDERVOLT"), "#if matches");
 
   const toggled = r.select(0);
   assert.equal(r.currentBlock?.name, "diagnostics", "toggling stays put");
   assert.ok(lines(toggled).includes("Generator spinning up..."));
   assert.ok(lines(toggled).includes("Generator [on]"), "the screen redraws with the new state");
+  assert.ok(
+    !lines(toggled).includes("WARNING: MAIN BUS UNDERVOLT"),
+    "and the warning goes with it"
+  );
 
   const back = r.select(1);
   assert.equal(r.currentBlock?.name, "main");

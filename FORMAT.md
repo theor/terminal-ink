@@ -258,10 +258,15 @@ A tag is `#name`, optionally followed by whitespace-separated arguments:
 `#delay 800`. Tags go at the end of any line, or on a line of their own. Several
 may share a line: `..... #speed 40 #delay 800`.
 
-There are **seven** tags. Anything else parses fine and is carried through the
-runner, but nothing consumes it — an unknown tag is inert. The one exception is
-`#set`: a malformed one is an error rather than a no-op, because an assignment
-that silently does nothing is the failure this format is built to avoid.
+There are **eight** tags, listed in `src/lib/tags.ts` — one entry each, holding
+everything about them. A name that is not in that list parses fine and is
+carried along, but nothing consumes it: an unknown tag is inert, which is the
+only way a tag is allowed to do nothing quietly.
+
+A tag that *is* in the list is checked against its entry, and reported if it
+does not match: wrong shape (`#password a=b`), wrong number of arguments
+(`#speed` with none), or a position where it would have no effect (`#title` on
+a block header).
 
 ### Where a tag can sit, and when it fires
 
@@ -277,8 +282,10 @@ A tag on a choice that opens a **sub-menu** acts as that sub-menu's header tags:
 it fires on entry and on every redraw of the sub-menu. That is how you get a
 sub-menu to clear itself.
 
-Tags on a choice are never used to decorate the choice's label — `#title` on a
-`*` line does nothing visible.
+Two tags are restricted, because the missing positions would have no meaning:
+`#title` decorates a printed line and so is **text lines only**, and `#if`
+cannot sit on a **block header**. Writing them elsewhere is an error rather
+than a silent no-op.
 
 ### `#set <name> = <value>`
 
@@ -300,7 +307,45 @@ Generator online #set generator = on
   [Variables](#variables) for why that is usually the wrong place for it.
 - A `#set` that is not an assignment (`#set x`, `#set x = `) is an **error**,
   not an inert tag.
-- Use `\#` if a value needs a literal hash: `#set colour = \#ff0000`.
+- A value stops at the next tag and at an unescaped `->`. Escape either if the
+  value needs it: `#set colour = \#ff0000`, `#set msg = press \-> to go on`.
+
+### `#if <name> = <value>`
+
+Runs the line only when the variable holds that value. On a line of text it
+decides whether the line prints; on a choice it decides whether the choice is
+**offered at all**:
+
+```
+= main
+Reactor nominal
+ALARM: COOLANT LOW #if coolant = low
+* Vent coolant #set coolant = low
+* Emergency purge -> purge #if coolant = low
+```
+
+The inline divert comes **before** the tags, as it always does. The other way
+round, the `-> purge` would be read as part of the value — so the line is
+rejected rather than quietly never matching.
+
+- A hidden choice is **gone from the menu**, not blanked — and the choices
+  around it keep working, because the runner tracks them by their position in
+  the source rather than in the menu.
+- On a **divert** it decides whether the story goes there: `-> purge #if
+  coolant = low` jumps when it matches and carries on down the block when it
+  does not. That is the one way flow depends on state.
+- It suppresses **everything else written on the line**, so a `#set` beside a
+  false `#if` does not run either.
+- An **unset** variable matches nothing — not even the empty string. There is
+  no value there to compare against.
+- The comparison is exact and case-sensitive: `#if candle = lit` and `#set
+  candle = Lit` do not match.
+- Not allowed on a **block header**, where suppressing "the screen" has no
+  sensible meaning.
+
+There is no `!=`, no `>` and no `or`. If you need the opposite of a condition,
+set the variable to both values you care about (`open` / `shut`) and test for
+the one you want, rather than testing for the absence of the other.
 
 ### `#clear`
 
@@ -405,15 +450,17 @@ edit to `Terminal.svelte`.
 
 Deliberately, so you stop looking:
 
-- **No conditionals, and no state-based branching at all.** No `if`, no hiding a
-  choice behind a variable, no divert that depends on one. A variable can change
-  what a screen **says**; it can never change where the story **goes**. Branching
-  is player-driven — the player picks the choice that diverts.
-- **No arithmetic or comparison.** Values are strings; `#set n = 1` then
-  `#set n = 2`, not `n + 1`.
+- **No conditions beyond `#if name = value`.** No `!=`, no `>`, no `and` or
+  `or`, and no nesting — a condition is one variable against one literal, and a
+  line either carries one or it does not.
+- **No arithmetic.** Values are strings; `#set n = 1` then `#set n = 2`, not
+  `n + 1`.
 - **No expressions in `{...}`** — a variable name and nothing else.
 - **No functions, includes, or multi-file stories.**
 - **No inline styling** beyond `#title`.
+
+Branching is still mostly player-driven: the player picks the choice that
+diverts. `#if` narrows what is on offer, it does not run the story on its own.
 
 ## Errors
 
@@ -426,8 +473,14 @@ The parser reports:
 - a line matching no form (`= 9lives`, `->`, `#set x = `)
 - `Duplicate block name "x"`
 - `Unknown block "x"` — a divert whose target does not exist
-- ``#set needs a name and a value, as `#set name = value` `` — a bare `#set`,
-  which would otherwise sit there as an inert unknown tag
+- ``#set is written as `#set name = value` `` — a tag written in the wrong
+  shape, or with the wrong number of arguments. Every tag in `tags.ts` carries
+  the line quoted back at you here.
+- `#title does nothing on a block header` — a tag in a position where it would
+  have no effect
+
+The rule behind the last two: a tag the format knows about is never allowed to
+sit there doing nothing. Only an unrecognised tag is silently inert.
 
 Two failures surface at runtime instead, on screen:
 
@@ -470,9 +523,9 @@ Terminal {
   escapable = "#" | "{" | "}" | "=" | "*" | "-" | "/"
 
   tags    = tagItem*
-  tagItem = setTag | tag
-  setTag  = "#set" hs+ ident hs* "=" hs* value
-  tag      = ~("#set" hs) "#" ident tagArg* hs*
+  tagItem = pairTag | tag
+  pairTag  = "#" ident hs+ ident hs* "=" hs* value
+  tag      = "#" ident tagArg* hs*
   tagArg   = hs+ argToken
   argToken = (~(hs | "#") any)+
 
@@ -489,11 +542,14 @@ Four pieces are worth knowing when reading it:
   malformed header an error.
 - `chunk` has to stop in front of an `escape` as well as in front of `#`, `{`
   and `->`, or `abc\#def` would split in the wrong place.
-- `tag`'s `~("#set" hs)` is what stops a malformed `#set` from falling back to
-  an inert unknown tag — it fails the line instead, and gets reported. The `hs`
-  in the lookahead is why `#settings` is still an ordinary tag.
-- `value` running to the first unescaped `#` is why a `#set` value may contain
-  spaces.
+- **No tag name appears anywhere in the grammar.** It knows only the two shapes
+  a tag can take — `pairTag` for `#name lhs = rhs`, `tag` for `#name a b` — and
+  which names are real, which shape each takes, where each may sit and what each
+  does all live in `src/lib/tags.ts`. Adding a tag is an entry in that file and
+  nothing else: no rule here, no regeneration.
+- `value` running to the first unescaped `#` is why a `#set` or `#if` value may
+  contain spaces. `pairTag` needs an identifier on the left, which is why
+  `#speed 40` and `#delay 8=00` are still ordinary tags.
 
 The escapable list is mirrored by `ESCAPABLE` in `Parser.ts`; change both
 together.

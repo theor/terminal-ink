@@ -48,6 +48,7 @@ Generator: {generator}
 | `-> back` | return to the screen you came from |
 | `-> end` | stop |
 | `#set name = value` | assign a variable |
+| `#if name = value` | run this line only while the variable holds that value |
 | `{name}` | print a variable. An unset one prints as `{name}`. |
 | `\#` | print a reserved character literally |
 | `// ...` | comment |
@@ -81,6 +82,9 @@ block header, where they run as the block is entered.
 
 - `#set <name> = <value>` assigns a variable. The value may contain spaces, and
   on a choice it fires when that choice is picked: `* Toggle #set gen = on`
+- `#if <name> = <value>` runs the line only when the variable holds that value.
+  On a choice it decides whether the choice is offered at all; on a divert,
+  whether the story goes there
 - `#speed <number>` changes the speed of the typewriter effect - the higher, the slower
 - `#delay <milliseconds>` waits after the line is printed - defaults to 1500
 - `#title` outputs a header
@@ -89,9 +93,14 @@ block header, where they run as the block is entered.
   answered**
 - `#theme <name>` switches the look (see below)
 
-Those seven are the whole set. [`FORMAT.md`](FORMAT.md#tags) covers where each
-one may sit and when it fires -- a header tag re-fires on every redraw, a tag on
-a choice fires when that choice is picked.
+Those eight are the whole set, and each is defined in one place --
+`src/lib/tags.ts` holds how a tag is written, where it may be written, what it
+does to the story and what it does to the screen. Adding one is an entry there;
+the grammar knows only the two shapes a tag can take, not their names.
+
+[`FORMAT.md`](FORMAT.md#tags) covers where each may sit and when it fires -- a
+header tag re-fires on every redraw, a tag on a choice fires when that choice is
+picked.
 
 # Themes
 

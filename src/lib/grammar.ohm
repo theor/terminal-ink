@@ -49,7 +49,11 @@ Terminal {
   tagArg   = hs+ argToken
   argToken = (~(hs | "#") any)+
 
-  value  = (escape | ~"#" any)+
+  // Stops at a `->` as well as at the next tag: on a choice the inline divert
+  // is written before the tags, so `#if x = y -> there` is a misplaced divert
+  // rather than a value of "y -> there". Failing the line says so; a value
+  // that really wants an arrow escapes it as `\->`.
+  value  = (escape | ~("#" | "->") any)+
   ident  = (letter | "_") (alnum | "_")*
   indent = hs*
   hs     = " " | "\t"

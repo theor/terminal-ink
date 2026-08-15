@@ -49,6 +49,11 @@ export interface TagSpec {
   syntax: string;
   /** Changes story state. Runs before the line it sits on is rendered. */
   apply?: (vars: Vars, args: string[]) => void;
+  /**
+   * Decides whether the line runs at all. A false answer skips the line and
+   * everything else on it, and hides a choice rather than blanking its label.
+   */
+  allows?: (vars: Vars, args: string[]) => boolean;
   /** Stops the runner until the player answers. */
   gate?: boolean;
   /**
@@ -67,6 +72,17 @@ export const TAGS: TagSpec[] = [
     shape: "pair",
     syntax: "#set name = value",
     apply: (vars, [name, value]) => vars.set(name, value),
+  },
+  {
+    name: "if",
+    shape: "pair",
+    // Not on a block header: there is no sensible answer to what suppressing
+    // a whole screen would mean, and the header runs again on every redraw.
+    positions: ["text", "own", "choice", "divert"],
+    syntax: "#if name = value",
+    // An unset variable matches nothing, the same way it prints as `{name}`
+    // rather than as blank -- a value that was never set is visibly not there.
+    allows: (vars, [name, value]) => vars.get(name) === value,
   },
   {
     name: "clear",

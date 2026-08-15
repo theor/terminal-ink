@@ -40,6 +40,7 @@ Generator: {generator}
 DIAGNOSTICS #title
 Generator [{generator}]
 Backup generator [off]
+WARNING: MAIN BUS UNDERVOLT #if generator = off
 * Toggle generator #set generator = on
   Generator spinning up... #delay 800
 * Back -> back
