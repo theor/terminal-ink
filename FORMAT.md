@@ -92,7 +92,7 @@ looks like syntax:
 | `set generator = on` | text | assignment is `#set`; this is just a line |
 | `Reactor = nominal` | text | a header needs `=` *first* |
 | `text // not a comment` | text | `//` only comments when it starts the line |
-| `#setting up` | text + tag | `#set` needs whitespace after it to be a `#set` |
+| `#setting up` | text + tag | a tag name is a whole word; this one is not `#set` |
 | `= 9lives` | **error** | a block name may not start with a digit |
 | `= ` | **error** | a header needs a name |
 | `->` | **error** | a divert needs a target |
@@ -142,11 +142,11 @@ Two places escapes do **not** reach:
 
 - A backslash immediately before one of the seven characters. `\#` always means
   a literal `#`, never backslash-then-tag.
-- A tag's **arguments**. They are split on whitespace and stop at `#`, so
-  `#password se\#ret` is read as a `#password` of `se\` followed by a second tag
-  called `ret` — it parses, but it does not mean what it looks like. Keep `#`
-  and spaces out of tag arguments. A `#set` **value** is the exception: it runs
-  to the next tag, so it takes both spaces and `\#`.
+- A tag's **arguments**. They stop at `#` and at `->`, and a backslash in there
+  is a plain backslash, so `#password se\#ret` reads as a `#password` of `se\`
+  followed by a second tag called `ret` — it parses, but not as it looks. Keep
+  `#` and `->` out of tag arguments. (Spaces are fine in a `#set` or `#if`
+  value, which is everything after the `=`.)
 
 ## Blocks and flow
 
@@ -264,9 +264,9 @@ carried along, but nothing consumes it: an unknown tag is inert, which is the
 only way a tag is allowed to do nothing quietly.
 
 A tag that *is* in the list is checked against its entry, and reported if it
-does not match: wrong shape (`#password a=b`), wrong number of arguments
-(`#speed` with none), or a position where it would have no effect (`#title` on
-a block header).
+does not match: wrong number of arguments (`#speed` with none), a missing `=`
+(`#set x on`), or a position where it would have no effect (`#title` on a block
+header).
 
 ### Where a tag can sit, and when it fires
 
@@ -307,8 +307,8 @@ Generator online #set generator = on
   [Variables](#variables) for why that is usually the wrong place for it.
 - A `#set` that is not an assignment (`#set x`, `#set x = `) is an **error**,
   not an inert tag.
-- A value stops at the next tag and at an unescaped `->`. Escape either if the
-  value needs it: `#set colour = \#ff0000`, `#set msg = press \-> to go on`.
+- A value may contain spaces, but not `#` or `->` — those end the arguments,
+  and escapes do not reach inside them. `#set colour = \#ff0000` does not work.
 
 ### `#if <name> = <value>`
 
@@ -470,12 +470,12 @@ click one to jump to the line.
 
 The parser reports:
 
-- a line matching no form (`= 9lives`, `->`, `#set x = `)
+- a line matching no form (`= 9lives`, `->`, `* Go #set x = 1 -> there`)
 - `Duplicate block name "x"`
 - `Unknown block "x"` — a divert whose target does not exist
-- ``#set is written as `#set name = value` `` — a tag written in the wrong
-  shape, or with the wrong number of arguments. Every tag in `tags.ts` carries
-  the line quoted back at you here.
+- ``#set is written as `#set name = value` `` — a tag whose arguments are not
+  what it wants: too few, too many, or a missing `=`. Every tag in `tags.ts`
+  carries the line quoted back at you here.
 - `#title does nothing on a block header` — a tag in a position where it would
   have no effect
 
@@ -522,12 +522,10 @@ Terminal {
   escape    = "\\" escapable
   escapable = "#" | "{" | "}" | "=" | "*" | "-" | "/"
 
-  tags    = tagItem*
-  tagItem = pairTag | tag
-  pairTag  = "#" ident hs+ ident hs* "=" hs* value
+  tags    = tag*
   tag      = "#" ident tagArg* hs*
   tagArg   = hs+ argToken
-  argToken = (~(hs | "#") any)+
+  argToken = (~(hs | "#" | "->") any)+
 
   value  = (escape | ~"#" any)+
   ident  = (letter | "_") (alnum | "_")*
@@ -542,14 +540,15 @@ Four pieces are worth knowing when reading it:
   malformed header an error.
 - `chunk` has to stop in front of an `escape` as well as in front of `#`, `{`
   and `->`, or `abc\#def` would split in the wrong place.
-- **No tag name appears anywhere in the grammar.** It knows only the two shapes
-  a tag can take — `pairTag` for `#name lhs = rhs`, `tag` for `#name a b` — and
-  which names are real, which shape each takes, where each may sit and what each
-  does all live in `src/lib/tags.ts`. Adding a tag is an entry in that file and
-  nothing else: no rule here, no regeneration.
-- `value` running to the first unescaped `#` is why a `#set` or `#if` value may
-  contain spaces. `pairTag` needs an identifier on the left, which is why
-  `#speed 40` and `#delay 8=00` are still ordinary tags.
+- **No tag name, and no per-tag structure, appears anywhere in the grammar.** A
+  tag is a name and whitespace-separated arguments, full stop — `#set x = 1` is
+  three arguments, and the `=` is one of them. Which names are real, how each
+  reads its arguments, where each may sit and what each does all live in
+  `src/lib/tags.ts`. Adding a tag is an entry in that file and nothing else: no
+  rule here, no regeneration.
+- `argToken` stopping at `->` is what keeps `#set x = 1 -> there` from
+  swallowing an inline divert. It stops at `#` too, which is why a tag's
+  arguments end where the next tag begins.
 
 The escapable list is mirrored by `ESCAPABLE` in `Parser.ts`; change both
 together.

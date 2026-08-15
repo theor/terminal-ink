@@ -19,7 +19,7 @@ Terminal {
   // `~("=" ~"=")` keeps a malformed header (`= 9lives`) an error instead of
   // silently becoming body text, while leaving `=== SYSTEM ===` rules alone.
   textLine    = indent ~("=" ~"=") body tags
-  tagLine     = indent tagItem+   // a directive on its own line, e.g. `#clear`
+  tagLine     = indent tag+   // a directive on its own line, e.g. `#clear`
   blankLine   = hs*
 
   divert = "->" hs* ident hs*
@@ -38,22 +38,18 @@ Terminal {
   escape    = "\\" escapable
   escapable = "#" | "{" | "}" | "=" | "*" | "-" | "/"
 
-  tags    = tagItem*
-  tagItem = pairTag | tag
-  // The two shapes a tag can take. No tag *name* appears here: which names are
-  // real, which shape each one takes and what it does are all in tags.ts, so
-  // adding a tag needs no grammar change. A pair keeps its spaces because the
-  // value runs to the next tag; ordinary arguments are split on whitespace.
-  pairTag  = "#" ident hs+ ident hs* "=" hs* value
+  // One shape for every tag: a name and whitespace-separated arguments. No tag
+  // *name* appears here, and neither does any per-tag structure -- `#set x = 1`
+  // is just three arguments, and tags.ts is what knows the middle one has to be
+  // an `=`. Adding a tag needs no grammar change.
+  tags    = tag*
   tag      = "#" ident tagArg* hs*
   tagArg   = hs+ argToken
-  argToken = (~(hs | "#") any)+
+  // Stops at `->` as well as at the next tag, because on a choice the inline
+  // divert is written before the tags: `#set x = 1 -> there` is a misplaced
+  // divert rather than an argument, and failing the line says so.
+  argToken = (~(hs | "#" | "->") any)+
 
-  // Stops at a `->` as well as at the next tag: on a choice the inline divert
-  // is written before the tags, so `#if x = y -> there` is a misplaced divert
-  // rather than a value of "y -> there". Failing the line says so; a value
-  // that really wants an arrow escapes it as `\->`.
-  value  = (escape | ~("#" | "->") any)+
   ident  = (letter | "_") (alnum | "_")*
   indent = hs*
   hs     = " " | "\t"

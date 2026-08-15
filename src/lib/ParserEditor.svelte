@@ -13,7 +13,8 @@
   /** How long to wait after a keystroke before restarting the preview. */
   const RESTART_DELAY = 500;
 
-  const PAIR_TAGS = TAGS.filter((t) => t.shape === "pair").map((t) => t.name);
+  /** The tags that touch story state, as opposed to the display. */
+  const STATE_TAGS = TAGS.filter((t) => t.apply || t.allows).map((t) => t.name);
 
   const STORIES: Record<string, string> = {
     "story.term": storySource,
@@ -101,11 +102,10 @@
             [/^\s*\/\/.*$/, "comment"],
             [/^\s*=\s*\w+/, "keyword"],
             [/^\s*\*/, "keyword"],
-            // A tag written as an assignment reads as a keyword even though it
-            // is spelled as a tag -- it changes state, where the others only
-            // change the display. Built from the registry, so a new one of
-            // them highlights without touching this file.
-            [new RegExp(`#(${PAIR_TAGS.join("|")})\\b`), "keyword"],
+            // A tag that changes or reads story state reads as a keyword,
+            // where the ones that only change the display do not. Built from
+            // the registry, so a new one highlights without touching this file.
+            [new RegExp(`#(${STATE_TAGS.join("|")})\\b`), "keyword"],
             [/->\s*\w*/, "type"],
             [/#\w+/, "annotation"],
             [/\{\s*\w+\s*\}/, "variable"],

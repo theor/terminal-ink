@@ -9,6 +9,7 @@ import {
   type Node,
   type TextNode,
 } from "./Parser.ts";
+import { tagValues } from "./tags.ts";
 
 /** Shorthand: the block with the given name, asserted to exist. */
 function block(source: string, name: string) {
@@ -125,34 +126,35 @@ test("reads diverts, inline and standalone", () => {
   });
 });
 
-test("reads #set as a two-argument tag", () => {
-  const b = block("= main\n  #set generator = on\n  #set core_temp = 41.5\n", "main");
-  assert.deepEqual(
-    b.children.map((n) => n.tags),
-    [
-      [{ name: "set", pair: true, args: ["generator", "on"] }],
-      [{ name: "set", pair: true, args: ["core_temp", "41.5"] }],
-    ]
-  );
+test("the parser splits arguments and reads nothing into them", () => {
+  // Including the `=`, which is an argument like any other. Turning those
+  // three back into a name and a value is tags.ts's job, not the parser's.
+  const b = block("= main\n  #set generator = on\n", "main");
+  assert.deepEqual(b.children[0].tags, [
+    { name: "set", args: ["generator", "=", "on"] },
+  ]);
   assert.equal(b.children[0].kind, "directive", "a #set line prints nothing");
+  assert.deepEqual(tagValues("set", ["generator", "=", "on"]), ["generator", "on"]);
 });
 
 test("a #set value keeps its spaces and stops at the next tag", () => {
   const b = block("= main\n  #set candle = burning bright #delay 100\n", "main");
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", pair: true, args: ["candle", "burning bright"] },
+    { name: "set", args: ["candle", "=", "burning", "bright"] },
     { name: "delay", args: ["100"] },
+  ]);
+  assert.deepEqual(tagValues("set", b.children[0].tags[0].args), [
+    "candle",
+    "burning bright",
   ]);
 });
 
-test("the parser records which shape a tag was written in", () => {
-  // The grammar knows the two shapes and no tag names at all; `pair` is what
-  // lets tags.ts say whether the shape written was the right one.
+test("an unknown tag's arguments are left exactly as written", () => {
   const b = block("= main\n  #set a = 1 #delay 100 #whatever x = 2\n", "main");
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", pair: true, args: ["a", "1"] },
+    { name: "set", args: ["a", "=", "1"] },
     { name: "delay", args: ["100"] },
-    { name: "whatever", pair: true, args: ["x", "2"] },
+    { name: "whatever", args: ["x", "=", "2"] },
   ]);
 });
 
@@ -165,12 +167,11 @@ test("#set rides on headers, text lines and choices", () => {
     ].join("\n"),
     "main"
   );
-  assert.deepEqual(b.tags, [{ name: "set", pair: true, args: ["generator", "off"] }]);
-  assert.deepEqual(b.children[0].tags, [
-    { name: "set", pair: true, args: ["generator", "on"] },
-  ]);
-  assert.deepEqual(b.children[1].tags, [
-    { name: "set", pair: true, args: ["generator", "spinning up"] },
+  assert.deepEqual(b.tags, [{ name: "set", args: ["generator", "=", "off"] }]);
+  assert.deepEqual(b.children[0].tags, [{ name: "set", args: ["generator", "=", "on"] }]);
+  assert.deepEqual(tagValues("set", b.children[1].tags[0].args), [
+    "generator",
+    "spinning up",
   ]);
 });
 
@@ -203,14 +204,13 @@ test("reports a malformed #set wherever it sits", () => {
   }
 });
 
-test("reports an ordinary tag written as an assignment", () => {
-  // `#password a=b` used to parse as the single argument "a=b". It is a pair
-  // now, so it has to be an error rather than a quietly different password.
-  const story = parse("= main\n  ENTER PASSWORD #password a=b\n");
-  assert.deepEqual(
-    story.errors.map((e) => e.message),
-    ["#password is written as `#password <word>`"]
-  );
+test("an = inside an argument is just a character", () => {
+  // Nothing in the grammar treats `=` specially, so a password may contain one.
+  const story = parse("= main\n  ENTER PASSWORD #password a=b\n  * ok\n");
+  assert.deepEqual(story.errors, []);
+  assert.deepEqual(story.blocks[0].children[0].tags, [
+    { name: "password", args: ["a=b"] },
+  ]);
 });
 
 test("reports a tag given the wrong number of arguments", () => {
@@ -238,11 +238,9 @@ test("reports a tag written where it does nothing", () => {
   ]);
 });
 
-test("#if is read as a pair, and is rejected on a block header", () => {
+test("#if reads as an assignment, and is rejected on a block header", () => {
   const b = block("= main\n  ALARM #if coolant = low\n  * ok\n", "main");
-  assert.deepEqual(b.children[0].tags, [
-    { name: "if", pair: true, args: ["coolant", "low"] },
-  ]);
+  assert.deepEqual(tagValues("if", b.children[0].tags[0].args), ["coolant", "low"]);
   assert.deepEqual(
     parse("= main #if coolant = low\n  * ok\n").errors.map((e) => e.message),
     ["#if does nothing on a block header"]
@@ -296,10 +294,13 @@ test("a lone backslash survives untouched", () => {
   assert.deepEqual(texts(b.children), ["C:\\Users\\theor", "\\\\SERVER\\share"]);
 });
 
-test("a #set value can hold an escaped hash", () => {
+test("a value cannot hold a hash, because arguments end at the next tag", () => {
+  // The boundary that comes with arguments being ordinary tokens: `\#` is a
+  // text escape and means nothing here, so this is two tags, not a value.
   const b = block("= main\n  #set colour = \\#ff0000\n", "main");
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", pair: true, args: ["colour", "#ff0000"] },
+    { name: "set", args: ["colour", "=", "\\"] },
+    { name: "ff0000", args: [] },
   ]);
 });
 

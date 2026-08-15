@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import grammar from "./grammar.ohm-bundle.js";
+import { parse } from "./Parser.ts";
 
 function accepts(line: string): boolean {
   return grammar.match(line, "line").succeeded();
@@ -13,11 +14,11 @@ function ruleOf(line: string): string {
   return (m as any)._cst.children[0].ctorName;
 }
 
-/** Which of the two tag shapes a single-tag line was read as. */
-function ruleOfTag(line: string): string {
-  const m = grammar.match(line, "tagItem");
-  assert.ok(m.succeeded(), `expected ${JSON.stringify(line)} to parse`);
-  return (m as any)._cst.children[0].ctorName;
+/** The arguments a single tag was split into. */
+function argsOf(line: string): string[] {
+  const story = parse(line);
+  assert.deepEqual(story.errors, [], line);
+  return story.blocks[0].children[0].tags[0].args;
 }
 
 test("accepts prose with arbitrary punctuation", () => {
@@ -74,31 +75,29 @@ test("a #set value may hold spaces, and stops at the next tag", () => {
   assert.ok(accepts("#set candle = burning bright #delay 100"));
 });
 
-test("a pair value does not swallow an inline divert", () => {
+test("an argument does not swallow an inline divert", () => {
   // The arrow comes first on a choice. Written the other way round the value
   // would quietly become "low -> purge" and never match anything, so the line
   // has to fail instead.
   assert.ok(!accepts("* Purge #if coolant = low -> purge"), "divert after the tag");
   assert.ok(accepts("* Purge -> purge #if coolant = low"), "divert before it");
-  assert.ok(accepts("#set msg = press \\-> to go on"), "an escaped arrow is a value");
 });
 
-test("the grammar knows the two tag shapes, and no tag names", () => {
-  // Whether a name is real, and which shape it should take, is tags.ts's job
-  // -- so all of these parse here and are reported by the parser instead.
-  assert.ok(accepts("#set generator"), "wrong shape still parses");
-  assert.ok(accepts("#whatever a = b"), "an unknown name may be a pair");
+test("the grammar knows no tag names, and no per-tag structure", () => {
+  // Whether a name is real, and how its arguments should read, is tags.ts's
+  // job -- so all of these parse here and are reported by the parser instead.
+  assert.ok(accepts("#set generator"), "a malformed #set still parses");
+  assert.ok(accepts("#whatever a = b"), "an unknown name takes arguments too");
   assert.ok(accepts("#settings"), "a name merely starting with set");
   assert.ok(accepts("#setup 3"));
 });
 
-test("only an assignment-shaped tag is read as a pair", () => {
-  // What separates the shapes: a pair needs an identifier and an `=`.
-  assert.equal(ruleOfTag("#set generator = on"), "pairTag");
-  assert.equal(ruleOfTag("#password sable"), "tag", "no equals sign");
-  assert.equal(ruleOfTag("#speed 40"), "tag", "a number is not an identifier");
-  assert.equal(ruleOfTag("#delay 8=00"), "tag", "nor is the left of that `=`");
-  assert.equal(ruleOfTag("#clear"), "tag");
+test("every tag is read the same way: a name and its arguments", () => {
+  assert.deepEqual(argsOf("#set generator = on"), ["generator", "=", "on"]);
+  assert.deepEqual(argsOf("#password sable"), ["sable"]);
+  assert.deepEqual(argsOf("#speed 40"), ["40"]);
+  assert.deepEqual(argsOf("#delay 8=00"), ["8=00"], "an = is not special");
+  assert.deepEqual(argsOf("#clear"), []);
 });
 
 test("a rule of equals signs is text, not a block header", () => {

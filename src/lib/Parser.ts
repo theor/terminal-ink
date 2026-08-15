@@ -11,16 +11,13 @@ export type Segment =
 /**
  * `#delay 800` -> `{ name: "delay", args: ["800"] }`
  *
- * A tag written as an assignment -- `#set generator = on` -> `{ name: "set",
- * pair: true, args: ["generator", "on"] }` -- keeps a value holding spaces as
- * one argument. The parser records which of the two shapes was written and
- * leaves it to `tags.ts` to say whether that was the right one.
+ * Arguments are whatever the line held, split on whitespace and nothing more:
+ * `#set x = 1` is three of them. Reading them as a name and a value is
+ * `tags.ts`'s job, so the parser has no per-tag knowledge at all.
  */
 export interface Tag {
   name: string;
   args: string[];
-  /** Set only when the tag was written as `#name lhs = rhs`. */
-  pair?: true;
 }
 
 interface NodeBase {
@@ -84,12 +81,6 @@ export const IMPLICIT_BLOCK = "start";
  */
 export const ESCAPABLE = "#{}=*-/";
 
-const ESCAPE_RE = /\\([#{}=*\-/])/g;
-
-/** Drops the backslash from every escape sequence in a raw source string. */
-function unescape(raw: string): string {
-  return raw.replace(ESCAPE_RE, "$1");
-}
 
 // --- line-level semantics -------------------------------------------------
 
@@ -179,18 +170,6 @@ semantics.addOperation<any>("parse", {
   },
   tags(list) {
     return list.children.map((c) => c.parse());
-  },
-  tagItem(t) {
-    return t.parse();
-  },
-  pairTag(_hash, name, _h1, lhs, _h2, _eq, _h3, value) {
-    // Two arguments, always -- the value keeps its spaces instead of being
-    // split into tokens the way an ordinary tag's arguments are.
-    return {
-      name: name.sourceString,
-      pair: true,
-      args: [lhs.sourceString, unescape(value.sourceString.trim())],
-    };
   },
   tag(_hash, name, args, _hs) {
     return {
@@ -382,17 +361,9 @@ function validate(story: Story) {
       // something can be written wrongly.
       if (!spec) continue;
 
-      const written = tag.pair ? "pair" : "args";
-      if (written !== spec.shape) {
+      if (spec.bind(tag.args) === null) {
         fail(line, `#${tag.name} is written as \`${spec.syntax}\``);
         continue;
-      }
-      if (spec.shape === "args" && spec.arity) {
-        const [min, max] = spec.arity;
-        if (tag.args.length < min || tag.args.length > max) {
-          fail(line, `#${tag.name} is written as \`${spec.syntax}\``);
-          continue;
-        }
       }
       if (!positionsOf(spec).includes(position)) {
         fail(line, `#${tag.name} does nothing ${WHERE[position]}`);
@@ -469,10 +440,6 @@ function segmentsToSource(segments: Segment[]): string {
 }
 
 function tagToString(tag: Tag): string {
-  if (tag.pair) {
-    const [lhs, rhs] = tag.args;
-    return `#${tag.name} ${lhs} = ${rhs.replace(/#/g, "\\#")}`;
-  }
   return `#${tag.name}${tag.args.map((a) => " " + a).join("")}`;
 }
 

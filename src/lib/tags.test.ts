@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "./Parser.ts";
-import { TAGS, tagSpec, positionsOf, type TerminalUI, type Vars } from "./tags.ts";
+import {
+  TAGS,
+  tagSpec,
+  tagValues,
+  positionsOf,
+  type TerminalUI,
+  type Vars,
+} from "./tags.ts";
 
 /** Records what the tags asked the display to do, in order. */
 function fakeUI() {
@@ -29,21 +36,35 @@ async function draw(source: string) {
       continue;
     }
     for (const tag of tags) {
-      const view = tagSpec(tag.name)?.view;
-      if (view?.phase === phase) await view.run(ui, tag.args);
+      const spec = tagSpec(tag.name);
+      if (spec?.view?.phase !== phase) continue;
+      const values = spec.bind(tag.args);
+      if (values) await spec.view.run(ui, values);
     }
   }
   return calls;
 }
 
-test("every tag declares how it is written", () => {
+test("every tag declares how it is written, and rejects what it is not", () => {
   for (const spec of TAGS) {
     assert.ok(spec.syntax, `${spec.name} has no syntax line`);
-    assert.ok(
-      spec.shape === "pair" || spec.arity,
-      `${spec.name} takes arguments but declares no arity`
+    // Nine arguments is not a shape any tag wants, so `bind` must refuse it --
+    // otherwise a tag would quietly accept nonsense.
+    assert.equal(
+      spec.bind(["a", "b", "c", "d", "e", "f", "g", "h", "i"]),
+      null,
+      `${spec.name} accepts arguments it should not`
     );
   }
+});
+
+test("an assignment needs its = and keeps the rest as one value", () => {
+  assert.deepEqual(tagValues("set", ["x", "=", "a", "b"]), ["x", "a b"]);
+  assert.deepEqual(tagValues("if", ["x", "=", "a", "b"]), ["x", "a b"]);
+  assert.equal(tagValues("set", ["x", "a"]), null, "no =");
+  assert.equal(tagValues("set", ["x", "="]), null, "no value");
+  assert.equal(tagValues("set", ["x"]), null);
+  assert.equal(tagValues("nonsense", ["x", "=", "y"]), null, "unknown tag");
 });
 
 test("a tag does something, or it should not be in the registry", () => {

@@ -94,9 +94,10 @@ block header, where they run as the block is entered.
 - `#theme <name>` switches the look (see below)
 
 Those eight are the whole set, and each is defined in one place --
-`src/lib/tags.ts` holds how a tag is written, where it may be written, what it
-does to the story and what it does to the screen. Adding one is an entry there;
-the grammar knows only the two shapes a tag can take, not their names.
+`src/lib/tags.ts` holds how a tag reads its arguments, where it may be written,
+what it does to the story and what it does to the screen. Adding one is an entry
+there. The grammar knows only that a tag is a name and some arguments -- not
+their names, and not that the `=` in `#set x = 1` means anything.
 
 [`FORMAT.md`](FORMAT.md#tags) covers where each may sit and when it fires -- a
 header tag re-fires on every redraw, a tag on a choice fires when that choice is

@@ -317,19 +317,22 @@ export class Runner {
   private allowed(tags: Tag[]): boolean {
     return tags.every((tag) => {
       const spec = tagSpec(tag.name);
-      if (!spec?.allows || spec.shape !== (tag.pair ? "pair" : "args")) return true;
-      return spec.allows(this.vars, tag.args);
+      if (!spec?.allows) return true;
+      const values = spec.bind(tag.args);
+      // A tag written wrongly is reported by the parser; here it is ignored,
+      // so a typo does not silently hide half a screen.
+      return values === null || spec.allows(this.vars, values);
     });
   }
 
   private applyTags(tags: Tag[]) {
     for (const tag of tags) {
       const spec = tagSpec(tag.name);
+      if (!spec?.apply) continue;
       // Guarded rather than assumed: a story that failed to parse cleanly is
-      // still run, so the arguments may not be the shape the spec wants.
-      if (spec?.apply && spec.shape === (tag.pair ? "pair" : "args")) {
-        spec.apply(this.vars, tag.args);
-      }
+      // still run, so the arguments may not be what the tag wants.
+      const values = spec.bind(tag.args);
+      if (values) spec.apply(this.vars, values);
     }
   }
 

@@ -87,8 +87,10 @@
   /** Runs one phase of whatever the tags on a line do to the display. */
   async function runView(tags: Tag[], phase: "before" | "after") {
     for (const tag of tags) {
-      const view = tagSpec(tag.name)?.view;
-      if (view?.phase === phase) await view.run(ui, tag.args);
+      const spec = tagSpec(tag.name);
+      if (spec?.view?.phase !== phase) continue;
+      const values = spec.bind(tag.args);
+      if (values) await spec.view.run(ui, values);
     }
   }
 
