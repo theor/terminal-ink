@@ -11,29 +11,43 @@ import {
   TerminalNode
 } from 'ohm-js';
 
-export interface ArithmeticActionDict<T> extends BaseActionDict<T> {
-  Exp?: (this: NonterminalNode, arg0: IterationNode) => T;
-  Block?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: NonterminalNode, arg3: IterationNode) => T;
-  ident?: (this: NonterminalNode, arg0: NonterminalNode, arg1: IterationNode) => T;
-  ws?: (this: NonterminalNode, arg0: TerminalNode) => T;
-  nl?: (this: NonterminalNode, arg0: TerminalNode) => T;
+export interface TerminalActionDict<T> extends BaseActionDict<T> {
+  line?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  commentLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode) => T;
+  blockLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode, arg3: NonterminalNode, arg4: IterationNode, arg5: NonterminalNode) => T;
+  choiceLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode, arg3: NonterminalNode, arg4: IterationNode, arg5: NonterminalNode) => T;
+  divertLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
+  setLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode, arg3: NonterminalNode, arg4: IterationNode, arg5: TerminalNode, arg6: IterationNode, arg7: NonterminalNode, arg8: NonterminalNode) => T;
+  textLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: NonterminalNode, arg2: NonterminalNode) => T;
+  tagLine?: (this: NonterminalNode, arg0: NonterminalNode, arg1: IterationNode) => T;
+  blankLine?: (this: NonterminalNode, arg0: IterationNode) => T;
+  divert?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: NonterminalNode, arg3: IterationNode) => T;
+  body?: (this: NonterminalNode, arg0: IterationNode) => T;
+  segment?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  interp?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: NonterminalNode, arg3: IterationNode, arg4: TerminalNode) => T;
+  chunk?: (this: NonterminalNode, arg0: IterationNode) => T;
+  tags?: (this: NonterminalNode, arg0: IterationNode) => T;
+  tag?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: IterationNode, arg3: IterationNode) => T;
+  tagArg?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode) => T;
+  argToken?: (this: NonterminalNode, arg0: IterationNode) => T;
+  value?: (this: NonterminalNode, arg0: IterationNode) => T;
+  ident?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode, arg1: IterationNode) => T;
   indent?: (this: NonterminalNode, arg0: IterationNode) => T;
-  text?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode) => T;
-  choice?: (this: NonterminalNode, arg0: NonterminalNode, arg1: TerminalNode, arg2: IterationNode) => T;
+  hs?: (this: NonterminalNode, arg0: TerminalNode) => T;
 }
 
-export interface ArithmeticSemantics extends Semantics {
-  addOperation<T>(name: string, actionDict: ArithmeticActionDict<T>): this;
-  extendOperation<T>(name: string, actionDict: ArithmeticActionDict<T>): this;
-  addAttribute<T>(name: string, actionDict: ArithmeticActionDict<T>): this;
-  extendAttribute<T>(name: string, actionDict: ArithmeticActionDict<T>): this;
+export interface TerminalSemantics extends Semantics {
+  addOperation<T>(name: string, actionDict: TerminalActionDict<T>): this;
+  extendOperation<T>(name: string, actionDict: TerminalActionDict<T>): this;
+  addAttribute<T>(name: string, actionDict: TerminalActionDict<T>): this;
+  extendAttribute<T>(name: string, actionDict: TerminalActionDict<T>): this;
 }
 
-export interface ArithmeticGrammar extends Grammar {
-  createSemantics(): ArithmeticSemantics;
-  extendSemantics(superSemantics: ArithmeticSemantics): ArithmeticSemantics;
+export interface TerminalGrammar extends Grammar {
+  createSemantics(): TerminalSemantics;
+  extendSemantics(superSemantics: TerminalSemantics): TerminalSemantics;
 }
 
-declare const grammar: ArithmeticGrammar;
+declare const grammar: TerminalGrammar;
 export default grammar;
 

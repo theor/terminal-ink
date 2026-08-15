@@ -1,66 +1,59 @@
 import type { Action } from "svelte/action";
-interface TypewriterOptions {
-  line: string;
-  duration: number;
+
+export interface TypewriterOptions {
+  text: string;
+  /** Milliseconds per character. Higher is slower. */
+  speed: number;
+  /** Called once the whole line has been typed out. */
+  ondone?: () => void;
 }
-export const typewriter: Action<
-  HTMLElement,
-  TypewriterOptions,
-  { "on:done": () => void }
-> = (node: HTMLElement, { line, duration }: TypewriterOptions) => {
-  let index = 0;
 
-  let start = -1;
-  //   console.log("> start", line);
-  node.textContent = "";
-  node.classList.add("typewriter");
+/**
+ * Types `text` into the node one character at a time. The caller is told when
+ * the line is finished so it can send the next one, which is what keeps the
+ * terminal printing in order instead of all at once.
+ */
+export const typewriter: Action<HTMLElement, TypewriterOptions> = (
+  node,
+  options
+) => {
+  let opts = options;
+  let frame = 0;
 
-  const tick = (time: DOMHighResTimeStamp) => {
-    if (start < 0) {
-      start = time;
-    }
+  const run = () => {
+    cancelAnimationFrame(frame);
+    let index = 0;
+    let last = -1;
+    node.textContent = "";
+    node.classList.add("typewriter");
 
-    let deltaTime = time - start;
-    while (deltaTime > duration) {
-        deltaTime -= duration;
-      start = time;
-      const linePart = line.slice(0, index);
-      //   console.log("> tick", deltaTime, linePart);
-      node.textContent = linePart;
-
-      if (index < line.length) {
+    const tick = (time: DOMHighResTimeStamp) => {
+      if (last < 0) last = time;
+      while (time - last >= opts.speed) {
+        last += opts.speed;
+        node.textContent = opts.text.slice(0, index);
+        if (index >= opts.text.length) {
+          node.classList.remove("typewriter");
+          opts.ondone?.();
+          return;
+        }
         index += 1;
-      } else {
-        // console.log("> done", line);
-        node.classList.remove("typewriter");
-        node.dispatchEvent(new CustomEvent("done"));
-        return;
       }
-    }
-    requestAnimationFrame(tick);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
   };
-  requestAnimationFrame(tick);
-  return {
-    update(newLine) {
-      if (newLine.line === line) {
-        node.classList.remove("typewriter");
-        console.error("SKIP", line);
-        // node.dispatchEvent(new CustomEvent("done"));
 
-        return;
-      }
-      console.error("> update TYPEWRITER", line, newLine);
-      node.textContent = "";
-      line = newLine.line;
-      duration = newLine.duration;
-      index = 0;
-      tick(0);
-      // //     line = newLine;
-      // //     index = 0;
-      // //     tick();
+  run();
+
+  return {
+    update(next) {
+      const changed = next.text !== opts.text || next.speed !== opts.speed;
+      opts = next;
+      if (changed) run();
     },
-    // destroy() {
-    //     // the node has been removed from the DOM
-    // }
+    destroy() {
+      cancelAnimationFrame(frame);
+    },
   };
 };

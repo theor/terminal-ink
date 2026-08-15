@@ -1,17 +1,44 @@
-Arithmetic  {
-  Exp
-    = Block+
+Terminal {
 
-  Block
-    = #("= " ident nl) #((choice|text)*)
-  
-  ident
-    = letter alnum*
-  
-  ws = " " | "\t"
-  nl = "\r" | "\n"
-  indent = ws*
-  text = (alnum | ws )+ nl
-  choice
-    = indent "* " text+
+  // The parser is line-based: the source is split on newlines and each line is
+  // matched on its own. A bad line is reported on its own and the rest of the
+  // document keeps working, which matters when parsing on every keystroke.
+  line
+    = commentLine
+    | blockLine
+    | choiceLine
+    | divertLine
+    | setLine
+    | textLine
+    | tagLine
+    | blankLine
+
+  commentLine = indent "//" any*
+  blockLine   = indent "=" hs* ident hs* tags
+  choiceLine  = indent "*" hs* body divert? tags
+  divertLine  = indent divert tags
+  setLine     = indent "set" hs+ ident hs* "=" hs* value tags
+  // `~("=" ~"=")` keeps a malformed header (`= 9lives`) an error instead of
+  // silently becoming body text, while leaving `=== SYSTEM ===` rules alone.
+  textLine    = indent ~("=" ~"=") body tags
+  tagLine     = indent tag+          // a directive on its own line, e.g. `#clear`
+  blankLine   = hs*
+
+  divert = "->" hs* ident hs*
+
+  // Text is anything up to a tag, an interpolation or a divert arrow.
+  body    = segment+
+  segment = interp | chunk
+  interp  = "{" hs* ident hs* "}"
+  chunk   = (~("#" | "{" | "->") any)+
+
+  tags     = tag*
+  tag      = "#" ident tagArg* hs*
+  tagArg   = hs+ argToken
+  argToken = (~(hs | "#") any)+
+
+  value  = (~"#" any)+
+  ident  = (letter | "_") (alnum | "_")*
+  indent = hs*
+  hs     = " " | "\t"
 }

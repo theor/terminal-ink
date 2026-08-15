@@ -1,125 +1,190 @@
 <script lang="ts">
-  import { parse, Root } from "./Parser";
-  import { Runner } from "./Runner";
-
-  let text = String.raw`= rootblock
-* root
-  * diag
-    Generator off
-    backup generator off
-  * ops
-    -> block2
-  * -> root
-= block2
-* b2
-  * b21
-    * b22
-`;
-  let lines: string[] = [];
-  let choices: string[] = [];
-  let runner: Runner;
-
-  function poll() {
-    while (runner.canContinue) {
-      console.log("continue");
-
-      lines.push(runner.continue()!);
-    }
-    choices = runner.choices;
-  }
-  function selectChoice(choice: number){
-    runner.selectChoice(choice);
-    poll();
-  }
-
-  $: parsed = parse(text);
-
-  $: {
-    if (parsed instanceof Root) runner = new Runner(parsed);
-    poll();
-  }
-
-  import type monaco from "monaco-editor";
   import { onMount } from "svelte";
+  import type monaco from "monaco-editor";
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-  import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-  import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-  import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-  import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 
-  let divEl: HTMLDivElement = null!;
-  let editor: monaco.editor.IStandaloneCodeEditor;
-  let Monaco;
+  import initialSource from "../assets/story.term?raw";
+  import { parse, type ParseError } from "./Parser.ts";
+  import { Runner } from "./Runner.ts";
+  import Terminal from "./Terminal.svelte";
 
-  onMount(async () => {
-    // @ts-ignore
-    self.MonacoEnvironment = {
-      getWorker: function (_moduleId: any, label: string) {
-        if (label === "json") {
-          return new jsonWorker();
-        }
-        if (label === "css" || label === "scss" || label === "less") {
-          return new cssWorker();
-        }
-        if (label === "html" || label === "handlebars" || label === "razor") {
-          return new htmlWorker();
-        }
-        if (label === "typescript" || label === "javascript") {
-          return new tsWorker();
-        }
-        return new editorWorker();
-      },
-    };
+  /** How long to wait after a keystroke before restarting the preview. */
+  const RESTART_DELAY = 500;
 
-    Monaco = await import("monaco-editor");
-    editor = Monaco.editor.create(divEl, {
-      value: text,
-      language: "story",
-    });
-    editor.onDidChangeModelContent(() => {
-      text = editor.getValue();
+  let source = $state(initialSource);
+  let story = $derived(parse(source));
+  let errors = $derived(story.errors);
+
+  // Replaced -- not mutated -- so the Terminal restarts on a fresh Runner.
+  let runner = $state(new Runner(parse(initialSource)));
+
+  let divEl: HTMLDivElement = $state(null!);
+  // $state so the marker effect below re-runs once Monaco has finished loading.
+  let editor = $state<monaco.editor.IStandaloneCodeEditor | undefined>();
+  let Monaco = $state<typeof monaco | undefined>();
+
+  function restart() {
+    runner = new Runner(story);
+  }
+
+  let firstParse = true;
+  $effect(() => {
+    // Editing restarts the preview from the top once typing settles. The very
+    // first parse is already running, so it is skipped.
+    const current = story;
+    if (firstParse) {
+      firstParse = false;
+      return;
+    }
+    const handle = setTimeout(() => {
+      runner = new Runner(current);
+    }, RESTART_DELAY);
+    return () => clearTimeout(handle);
+  });
+
+  $effect(() => {
+    // Read first: an early return before this would leave the effect with no
+    // dependency on the errors and it would never run again.
+    const current = errors;
+    const model = editor?.getModel();
+    if (!Monaco || !model) return;
+    Monaco.editor.setModelMarkers(
+      model,
+      "terminal",
+      current.map((e: ParseError) => ({
+        severity: Monaco!.MarkerSeverity.Error,
+        message: e.message,
+        startLineNumber: e.line + 1,
+        endLineNumber: e.line + 1,
+        startColumn: e.column + 1,
+        endColumn: 1000,
+      }))
+    );
+  });
+
+  function goTo(error: ParseError) {
+    editor?.revealLineInCenter(error.line + 1);
+    editor?.setPosition({ lineNumber: error.line + 1, column: error.column + 1 });
+    editor?.focus();
+  }
+
+  onMount(() => {
+    // @ts-ignore -- Monaco reads this off the global.
+    self.MonacoEnvironment = { getWorker: () => new editorWorker() };
+
+    const ready = import("monaco-editor").then((m) => {
+      Monaco = m;
+      Monaco.languages.register({ id: "terminal" });
+      Monaco.languages.setMonarchTokensProvider("terminal", {
+        tokenizer: {
+          root: [
+            [/^\s*\/\/.*$/, "comment"],
+            [/^\s*=\s*\w+/, "keyword"],
+            [/^\s*\*/, "keyword"],
+            [/^\s*set\b/, "keyword"],
+            [/->\s*\w*/, "type"],
+            [/#\w+/, "annotation"],
+            [/\{\s*\w+\s*\}/, "variable"],
+          ],
+        },
+      });
+      Monaco.languages.setLanguageConfiguration("terminal", {
+        comments: { lineComment: "//" },
+      });
+
+      editor = Monaco.editor.create(divEl, {
+        value: source,
+        language: "terminal",
+        theme: "vs-dark",
+        minimap: { enabled: false },
+        automaticLayout: true,
+        renderWhitespace: "boundary",
+      });
+      editor.onDidChangeModelContent(() => {
+        source = editor!.getValue();
+      });
     });
 
     return () => {
-      editor.dispose();
+      void ready.then(() => editor?.dispose());
     };
   });
 </script>
 
-<div class="root">
-  <div>
-    <div bind:this={divEl} class="h-screen" />
+<div class="split">
+  <div class="pane">
+    <div class="toolbar">
+      <span class="name">story.term</span>
+      <button onclick={restart}>restart preview</button>
+    </div>
+    <div bind:this={divEl} class="editor"></div>
+    <ul class="errors" class:empty={errors.length === 0}>
+      {#each errors as error}
+        <li>
+          <button onclick={() => goTo(error)}>
+            line {error.line + 1}: {error.message}
+          </button>
+        </li>
+      {/each}
+    </ul>
   </div>
-  <!-- <textarea bind:value={text} rows="20" cols="80"></textarea> -->
-  <pre>{parsed?.toString()}</pre>
-  <pre>{JSON.stringify(parsed, null, 2)}</pre>
-  <div>
-    {#each lines as line}
-      <div>{line}</div>
-    {/each}
-    {#each choices as choice, i}
-      <button on:click={() => selectChoice(i)}>{choice}</button>
-    {/each}
+
+  <div class="pane preview">
+    <Terminal {runner} />
   </div>
 </div>
 
 <style>
-  .h-screen {
-    height: 100%;
-  }
-  .root {
-    height: 90vh;
-  }
-  pre {
-    white-space: pre-wrap; /* Since CSS 2.1 */
-  }
-
-  div.root {
+  .split {
     display: flex;
     flex-direction: row;
+    height: 100vh;
+    gap: 0.5rem;
   }
-  div > * {
-    flex: 1;
-    flex-shrink: 0;
+  .pane {
+    flex: 1 1 50%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .editor {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+  }
+  .name {
+    opacity: 0.6;
+  }
+  .errors {
+    flex: 0 0 auto;
+    max-height: 8rem;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+  }
+  .errors.empty {
+    display: none;
+  }
+  .errors button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.15rem 0.5rem;
+    border: 0;
+    background: none;
+    color: #ff6b6b;
+    font: inherit;
+    cursor: pointer;
+  }
+  .preview {
+    overflow: hidden;
   }
 </style>
