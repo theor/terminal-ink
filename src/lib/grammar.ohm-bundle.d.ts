@@ -30,7 +30,9 @@ export interface TerminalActionDict<T> extends BaseActionDict<T> {
   tags?: (this: NonterminalNode, arg0: IterationNode) => T;
   tag?: (this: NonterminalNode, arg0: TerminalNode, arg1: NonterminalNode, arg2: IterationNode, arg3: IterationNode) => T;
   tagArg?: (this: NonterminalNode, arg0: IterationNode, arg1: NonterminalNode) => T;
-  argToken?: (this: NonterminalNode, arg0: IterationNode) => T;
+  argToken?: (this: NonterminalNode, arg0: NonterminalNode) => T;
+  quotedArg?: (this: NonterminalNode, arg0: TerminalNode, arg1: IterationNode, arg2: TerminalNode) => T;
+  bareArg?: (this: NonterminalNode, arg0: IterationNode) => T;
   ident?: (this: NonterminalNode, arg0: NonterminalNode | TerminalNode, arg1: IterationNode) => T;
   indent?: (this: NonterminalNode, arg0: IterationNode) => T;
   hs?: (this: NonterminalNode, arg0: TerminalNode) => T;

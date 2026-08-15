@@ -143,11 +143,12 @@ Two places escapes do **not** reach:
 
 - A backslash immediately before one of the seven characters. `\#` always means
   a literal `#`, never backslash-then-tag.
-- A tag's **arguments**. They stop at `#` and at `->`, and a backslash in there
-  is a plain backslash, so `#password se\#ret` reads as a `#password` of `se\`
-  followed by a second tag called `ret` — it parses, but not as it looks. Keep
-  `#` and `->` out of tag arguments. (Spaces are fine in a `#set` or `#if`
-  value, which is everything after the `=`.)
+- A tag's **arguments**. A backslash in there is a plain backslash, so
+  `#password se\#ret` reads as a `#password` of `se\` followed by a second tag
+  called `ret` — it parses, but not as it looks. **Quotes**, not backslashes,
+  are how an argument holds an awkward character: `#password "se#ret"` is one
+  argument, and so is `"press -> to go on"`. The only thing a quoted argument
+  cannot hold is another double quote.
 
 ## Blocks and flow
 
@@ -291,8 +292,9 @@ plain words unless the tag says otherwise.
   override it.
 - **Values of different kinds are never equal.** `#if load = "34"` is false when
   `load` holds the number 34.
-- A string cannot contain `#` or `->`, because a tag's arguments end there — so
-  `#if name = "C# programmer"` cannot be written.
+- A quoted string may hold anything but a double quote — spaces, `#`, `->` —
+  because quotes make it a single argument: `#if name = "C# programmer"` is
+  fine. There is no escape for a `"` inside one.
 - `and` and `or` settle what they can: `#if false_thing and missing` is false
   rather than no answer, because the missing half cannot change the outcome.
 
@@ -362,8 +364,8 @@ Generator online #set generator = "on"
   [Variables](#variables) for why that is usually the wrong place for it.
 - A `#set` that is not an assignment (`#set x`, `#set x = `), or whose
   expression does not parse, is an **error** rather than an inert tag.
-- The expression cannot contain `#` or `->` — those end the tag's arguments,
-  and escapes do not reach inside them. `#set colour = "\#ff0000"` does not work.
+- Outside quotes the expression cannot contain `#` or `->`, because those end
+  the tag's arguments. Inside them it can: `#set colour = "#ff0000"`.
 
 ### `#if <expression>`
 
@@ -457,9 +459,9 @@ ENTER PASSWORD #password 123
 ```
 
 - The comparison is trimmed and **case-insensitive**.
-- The password is a **single token**. `#password two words` takes only `two`;
-  whitespace splits arguments, and escapes do not apply inside them, so a
-  password cannot contain a space or a `#`.
+- The password is a **single argument**. `#password two words` takes only `two`
+  — quote it to use the whole phrase: `#password "two words"`. The quotes are
+  not part of the password.
 - A **bare `#password`** with no argument means the empty password — pressing
   Enter on an empty prompt passes. Rarely what you want.
 - A wrong answer prints the theme's refusal (`ACCESS DENIED` on `crt`, `The ward
@@ -577,9 +579,11 @@ Terminal {
   escapable = "#" | "{" | "}" | "=" | "*" | "-" | "/"
 
   tags    = tag*
-  tag      = "#" ident tagArg* hs*
-  tagArg   = hs+ argToken
-  argToken = (~(hs | "#" | "->") any)+
+  tag       = "#" ident tagArg* hs*
+  tagArg    = hs+ argToken
+  argToken  = quotedArg | bareArg
+  quotedArg = "\"" (~"\"" any)* "\""
+  bareArg   = (~(hs | "#" | "->") any)+
 
   value  = (escape | ~"#" any)+
   ident  = (letter | "_") (alnum | "_")*
@@ -628,9 +632,12 @@ Four pieces are worth knowing when reading it:
   reads its arguments, where each may sit and what each does all live in
   `src/lib/tags.ts`. Adding a tag is an entry in that file and nothing else: no
   rule here, no regeneration.
-- `argToken` stopping at `->` is what keeps `#set x = 1 -> there` from
-  swallowing an inline divert. It stops at `#` too, which is why a tag's
-  arguments end where the next tag begins — and why a string cannot hold either.
+- `bareArg` stopping at `->` is what keeps `#set x = 1 -> there` from swallowing
+  an inline divert, and stopping at `#` is why a tag's arguments end where the
+  next tag begins. `quotedArg` is the way out of both: it runs to the closing
+  quote and is one argument whatever it holds. Note that the quotes stay in the
+  token — `tags.ts` decides what to do with them, which is how the same text can
+  be a string literal to `#set` and a plain word to `#password`.
 - The expression rules are **matched from `Expr`, never from `line`**. A tag
   that wants an expression joins its arguments back into one string and parses
   that, so `#if x < (3 + y)` needs nothing from the line grammar. Being

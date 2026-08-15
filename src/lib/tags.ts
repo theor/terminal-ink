@@ -54,11 +54,21 @@ export interface TerminalUI {
  */
 export type Bind<T> = (args: string[]) => T | null;
 
-/** Takes between `min` and `max` arguments, and passes them through. */
+/**
+ * Takes between `min` and `max` arguments, unquoted. Quotes are how an
+ * argument holds a space or a `#`; a tag that is not reading an expression has
+ * no use for the marks themselves, so `#password "two words"` is those two
+ * words rather than a password with quotes around it.
+ */
 const count =
   (min: number, max = min): Bind<string[]> =>
   (args) =>
-    args.length >= min && args.length <= max ? args : null;
+    args.length >= min && args.length <= max ? args.map(unquote) : null;
+
+const unquote = (arg: string): string =>
+  arg.length >= 2 && arg.startsWith('"') && arg.endsWith('"')
+    ? arg.slice(1, -1)
+    : arg;
 
 /**
  * `name = <expression>`. The `=` is not structure the parser knows about -- it

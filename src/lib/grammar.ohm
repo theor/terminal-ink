@@ -45,10 +45,16 @@ Terminal {
   tags    = tag*
   tag      = "#" ident tagArg* hs*
   tagArg   = hs+ argToken
-  // Stops at `->` as well as at the next tag, because on a choice the inline
-  // divert is written before the tags: `#set x = 1 -> there` is a misplaced
-  // divert rather than an argument, and failing the line says so.
-  argToken = (~(hs | "#" | "->") any)+
+  // A quoted argument is a single token even when it holds spaces, a `#` or an
+  // arrow, which is what lets a string in an expression hold them. Anything
+  // else stops at whitespace, at the next tag, and at `->` -- on a choice the
+  // inline divert is written before the tags, so `#set x = 1 -> there` is a
+  // misplaced divert rather than an argument, and failing the line says so.
+  argToken  = quotedArg | bareArg
+  quotedArg = "\"" (~"\"" any)* "\""
+  // Still allows a `"`, so an unclosed quote degrades to an ordinary token and
+  // is reported by the tag rather than derailing the line here.
+  bareArg   = (~(hs | "#" | "->") any)+
 
   ident  = (letter | "_") (alnum | "_")*
   indent = hs*

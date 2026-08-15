@@ -3,7 +3,7 @@
   import { typewriter } from "./TypingEffect.ts";
   import type { Runner, RunChoice, StepResult } from "./Runner.ts";
   import type { Tag } from "./Parser.ts";
-  import { tagSpec, type TerminalUI } from "./tags.ts";
+  import { tagSpec, tagValues, type TerminalUI } from "./tags.ts";
   import { DEFAULT_THEME, themeFor } from "./themes/index.ts";
 
   let {
@@ -123,7 +123,10 @@
 
     halted = step.halted;
     if (step.pause?.tag.name === "password") {
-      password = step.pause.tag.args[0] ?? "";
+      // Through the registry rather than off the raw arguments, so a quoted
+      // password is the words rather than the words with quotes around them.
+      const values = tagValues(step.pause.tag.name, step.pause.tag.args);
+      password = (values as string[] | null)?.[0] ?? "";
     } else {
       choices = step.choices;
     }

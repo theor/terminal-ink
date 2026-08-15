@@ -75,12 +75,23 @@ test("a #set value may hold spaces, and stops at the next tag", () => {
   assert.ok(accepts("#set candle = \"burning bright\" #delay 100"));
 });
 
-test("an argument does not swallow an inline divert", () => {
-  // The arrow comes first on a choice. Written the other way round the value
-  // would quietly become "low -> purge" and never match anything, so the line
-  // has to fail instead.
-  assert.ok(!accepts("* Purge #if coolant = \"low -> purge\""), "divert after the tag");
+test("a bare argument does not swallow an inline divert", () => {
+  // The arrow comes first on a choice. Written the other way round it would be
+  // read as part of the condition, so the line has to fail instead.
+  assert.ok(!accepts("* Purge #if coolant = low -> purge"), "divert after the tag");
   assert.ok(accepts("* Purge -> purge #if coolant = \"low\""), "divert before it");
+});
+
+test("a quoted argument may hold what a bare one may not", () => {
+  assert.ok(accepts("#if name = \"C# programmer\""), "a hash");
+  assert.ok(accepts("#set msg = \"press -> to go on\""), "an arrow");
+  assert.ok(accepts("#set msg = \"two words\" #delay 100"), "a space, then the next tag");
+  assert.ok(accepts("#password \"two words\""), "not only expression tags");
+});
+
+test("an unclosed quote is left to the tag to report", () => {
+  // It parses -- as an ordinary token -- rather than derailing the line here.
+  assert.deepEqual(argsOf("#whatever \"abc"), ['"abc']);
 });
 
 test("the grammar knows no tag names, and no per-tag structure", () => {

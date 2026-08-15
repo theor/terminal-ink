@@ -142,16 +142,28 @@ test("the parser splits arguments and reads nothing into them", () => {
 
 test("a #set value keeps its spaces and stops at the next tag", () => {
   const b = block("= main\n  #set candle = \"burning bright\" #delay 100\n", "main");
+  // A quoted argument is one token, spaces and all, so the value survives
+  // exactly as written rather than being split and rejoined.
   assert.deepEqual(b.children[0].tags, [
-    { name: "set", args: ["candle", "=", '"burning', 'bright"'] },
+    { name: "set", args: ["candle", "=", '"burning bright"'] },
     { name: "delay", args: ["100"] },
   ]);
-  // The tokens are joined back up before the expression is parsed, which is
-  // how a quoted value keeps its spaces without the grammar knowing.
   assert.deepEqual(tagValues("set", b.children[0].tags[0].args), {
     name: "candle",
     value: { kind: "string", value: "burning bright" },
   });
+});
+
+test("a quoted argument keeps what a bare one cannot", () => {
+  const b = block(
+    '= main\n  #set msg = "C# and -> and  two spaces" #delay 100\n',
+    "main"
+  );
+  assert.deepEqual(tagValues("set", b.children[0].tags[0].args), {
+    name: "msg",
+    value: { kind: "string", value: "C# and -> and  two spaces" },
+  });
+  assert.deepEqual(b.children[0].tags[1], { name: "delay", args: ["100"] });
 });
 
 test("an unknown tag's arguments are left exactly as written", () => {

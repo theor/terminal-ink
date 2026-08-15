@@ -130,6 +130,13 @@ test("#set is the tag that changes story state", () => {
   assert.deepEqual(vars.get("candle"), { kind: "string", value: "burning bright" });
 });
 
+test("a plain tag takes its arguments unquoted", () => {
+  // Quotes are how an argument holds a space; the marks are not the value.
+  assert.deepEqual(tagValues("password", ['"two words"']), ["two words"]);
+  assert.deepEqual(tagValues("password", ["sable"]), ["sable"]);
+  assert.deepEqual(tagValues("theme", ['"library"']), ["library"]);
+});
+
 test("#password is the tag that gates", () => {
   assert.deepEqual(
     TAGS.filter((s) => s.gate).map((s) => s.name),
