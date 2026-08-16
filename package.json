@@ -23,7 +23,13 @@
     "vite": "^5.4.4"
   },
   "dependencies": {
-    "monaco-editor": "^0.52.0",
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.9",
+    "@lezer/highlight": "^1.2.3",
     "ohm-js": "^17.1.0",
     "svelte-typewriter": "^3.2.3"
   },

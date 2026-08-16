@@ -1,20 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type monaco from "monaco-editor";
-  import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 
   import storySource from "../assets/story.lore?raw";
   import grimoireSource from "../assets/grimoire.lore?raw";
   import { blockAt, parse, type ParseError } from "./Parser.ts";
   import { Runner } from "./Runner.ts";
-  import { TAGS } from "./tags.ts";
+  import type { LoreEditor } from "./loreEditor.ts";
   import Terminal from "./Terminal.svelte";
 
   /** How long to wait after a keystroke before restarting the preview. */
   const RESTART_DELAY = 500;
-
-  /** The tags that touch story state, as opposed to the display. */
-  const STATE_TAGS = TAGS.filter((t) => t.apply || t.allows).map((t) => t.name);
 
   // $state so a loaded file can join the list and show up in the picker.
   let stories = $state<Record<string, string>>({
@@ -49,9 +44,8 @@
 
   let divEl: HTMLDivElement = $state(null!);
   let fileEl: HTMLInputElement = $state(null!);
-  // $state so the marker effect below re-runs once Monaco has finished loading.
-  let editor = $state<monaco.editor.IStandaloneCodeEditor | undefined>();
-  let Monaco = $state<typeof monaco | undefined>();
+  // $state so the error effect below re-runs once the editor has loaded.
+  let editor = $state<LoreEditor | undefined>();
 
   function restart() {
     runner = new Runner(story, startName);
@@ -70,8 +64,8 @@
   function loadStory(name: string) {
     storyName = name;
     source = stories[name];
-    // Monaco holds its own copy of the text, so it has to be told.
-    editor?.setValue(source);
+    // The editor holds its own copy of the text, so it has to be told.
+    editor?.setDoc(source);
   }
 
   function exportStory() {
@@ -113,86 +107,33 @@
     // Read first: an early return before this would leave the effect with no
     // dependency on the errors and it would never run again.
     const current = errors;
-    const model = editor?.getModel();
-    if (!Monaco || !model) return;
-    Monaco.editor.setModelMarkers(
-      model,
-      "terminal",
-      current.map((e: ParseError) => ({
-        severity: Monaco!.MarkerSeverity.Error,
-        message: e.message,
-        startLineNumber: e.line + 1,
-        endLineNumber: e.line + 1,
-        startColumn: e.column + 1,
-        endColumn: 1000,
-      }))
-    );
+    editor?.setErrors(current);
   });
 
   function goTo(error: ParseError) {
-    editor?.revealLineInCenter(error.line + 1);
-    editor?.setPosition({ lineNumber: error.line + 1, column: error.column + 1 });
-    editor?.focus();
+    editor?.goTo(error);
   }
 
   /** Set once the editor has been asked for; the load happens only once. */
   let loading: Promise<void> | undefined;
 
   /**
-   * Monaco is by far the largest thing this app ships, and play mode never
+   * The editor is by far the largest thing this app ships, and play mode never
    * puts it on screen -- so a tablet opened straight into `?play` should not
    * spend its first seconds downloading an editor nobody will look at.
-   *
-   * `editor.api` rather than `monaco-editor`: the latter contributes every
-   * built-in language, none of which is this one.
    */
   function loadEditor(): Promise<void> {
     if (loading) return loading;
 
-    // @ts-ignore -- Monaco reads this off the global.
-    self.MonacoEnvironment = { getWorker: () => new editorWorker() };
-
-    loading = import("monaco-editor/esm/vs/editor/editor.api").then((m) => {
-      Monaco = m;
-      Monaco.languages.register({ id: "terminal" });
-      Monaco.languages.setMonarchTokensProvider("terminal", {
-        tokenizer: {
-          root: [
-            // First, so an escaped sigil is not highlighted as the thing it
-            // would otherwise open.
-            [/\\[#{}=*\-/]/, "string.escape"],
-            [/^\s*\/\/.*$/, "comment"],
-            [/^\s*=\s*\w+/, "keyword"],
-            [/^\s*\*/, "keyword"],
-            // A tag that changes or reads story state reads as a keyword,
-            // where the ones that only change the display do not. Built from
-            // the registry, so a new one highlights without touching this file.
-            [new RegExp(`#(${STATE_TAGS.join("|")})\\b`), "keyword"],
-            [/->\s*\w*/, "type"],
-            [/#\w+/, "annotation"],
-            [/\{\s*\w+\s*\}/, "variable"],
-          ],
-        },
+    loading = import("./loreEditor.ts").then(({ createEditor }) => {
+      editor = createEditor(divEl, {
+        // Read now rather than captured earlier: a story may have been picked
+        // while there was no editor to put it in.
+        doc: source,
+        onChange: (text) => (source = text),
+        onCursorLine: (line) => (cursorLine = line),
       });
-      Monaco.languages.setLanguageConfiguration("terminal", {
-        comments: { lineComment: "//" },
-      });
-
-      editor = Monaco.editor.create(divEl, {
-        value: source,
-        language: "terminal",
-        theme: "vs-dark",
-        minimap: { enabled: false },
-        automaticLayout: true,
-        renderWhitespace: "boundary",
-      });
-      editor.onDidChangeModelContent(() => {
-        source = editor!.getValue();
-      });
-      editor.onDidChangeCursorPosition((e) => {
-        // Monaco counts lines from 1, the parser from 0.
-        cursorLine = e.position.lineNumber - 1;
-      });
+      editor.setErrors(errors);
     });
 
     return loading;
@@ -201,15 +142,15 @@
   onMount(() => {
     if (!play) void loadEditor();
     return () => {
-      void loading?.then(() => editor?.dispose());
+      void loading?.then(() => editor?.destroy());
     };
   });
 </script>
 
 <div class="split">
-  <!-- Kept on the page in play mode rather than unmounted, so Monaco holds its
-       text, cursor and undo history -- and given a size, because it lays itself
-       out against one. -->
+  <!-- Kept on the page in play mode rather than unmounted, so the editor holds
+       its text, cursor and undo history -- and given a size, because it lays
+       itself out against one. -->
   <div class="pane" class:offstage={play}>
     <div class="toolbar">
       <select
@@ -320,8 +261,8 @@
     overflow: hidden;
   }
 
-  /* Off the side of the window rather than `display: none`: Monaco lays itself
-     out against the size it is given, and zero is not one. */
+  /* Off the side of the window rather than `display: none`: the editor lays
+     itself out against the size it is given, and zero is not one. */
   .offstage {
     position: fixed;
     top: 0;

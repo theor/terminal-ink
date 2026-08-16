@@ -158,6 +158,12 @@ game table may well have no wifi.
 
 # Development
 
+The editor pane is CodeMirror 6, and everything about it lives in
+`src/lib/loreEditor.ts`: the tokenizer, which reads its list of state-changing
+tags from `tags.ts` so a new tag colours itself; the error markers, fed from
+the same `parse()` the preview runs on; and the theme. Nothing above that file
+mentions CodeMirror, which is also what lets play mode skip loading it.
+
 - `yarn test` - grammar, parser and runner tests (node's test runner, no extra deps)
 - `yarn run check` - svelte-check and tsc
 - `yarn gen2` - regenerate the Ohm parser bundle after editing `src/lib/grammar.ohm`
