@@ -8,7 +8,7 @@ write with it.
 - [Lines](#lines-the-grammar)
 - [Blocks and flow](#blocks-and-flow)
 - [Screens, redraws and sub-menus](#screens-redraws-and-sub-menus)
-- [Variables](#variables)
+- [Variables](#variables) — including [names that are never set](#names-that-are-never-set)
 - [Expressions](#expressions)
 - [Tags](#tags) — every `#pound` directive
 - [Themes](#themes)
@@ -51,9 +51,16 @@ It restarts at **the block the cursor is in**, named in the toolbar as
 `from <block>`. A screen five diverts deep is therefore on screen as you edit
 it, with nothing to click back down through and no `#password` to re-enter on
 the way. What it costs is everything that would have run first: a variable some
-earlier block `#set`s is unset here, and prints as `{name}`. Untick the box to
-run from the top instead — which is how you check an opening, a gate, or a
-screen whose text depends on how the player got there.
+earlier block `#set`s is unset here, and prints as `{name}`. Declare it in a
+[`#prelude`](#prelude) block instead and it survives, because a prelude is
+applied wherever the story starts. Untick the box to run from the top — which
+is how you check an opening, a gate, or a screen whose text depends on how the
+player got there.
+
+A prelude carries the **look** as well: `#theme` and `#speed` are settings, so
+`= book #prelude #theme library` draws every screen as a book however the story
+was started. What it cannot carry is anything that acts on a line — `#clear`,
+`#delay`, `#title`, `#password` — because there are no lines in a prelude.
 
 Moving around inside one block changes nothing. The preview only restarts when
 the cursor lands in a *different* block, so scrolling and editing in place leave
@@ -158,10 +165,11 @@ Two places escapes do **not** reach:
 
 ## Blocks and flow
 
-**The story starts at the first block in the document.** Not at a block named
-`start` — the name is not special. `story.lore` opens on `boot` and *also*
-contains a block called `start`, which is reached only by the `-> start` at the
-end of `boot`.
+**The story starts at the first block in the document** — the first one that is
+a screen, so a [`#prelude`](#prelude) at the top is applied and stepped over.
+Not at a block named `start`: the name is not special. `story.lore` opens on
+`boot` and *also* contains a block called `start`, which is reached only by the
+`-> start` at the end of `boot`.
 
 Content written before any `=` header goes into an implicit block named `start`,
 so a brand-new document runs without writing a header first. Note the collision:
@@ -255,8 +263,30 @@ Generator: {generator}
 * Toggle #set generator = "on"
 ```
 
-Initialise in a block you divert *away* from (like `boot`), not in a menu you
-return to.
+Declare starting values in a [`#prelude`](#prelude) block, which runs once
+before anything else and belongs to no screen:
+
+```
+= defaults #prelude
+#set generator = "off"
+
+= main
+Generator: {generator}
+* Toggle #set generator = "on"
+```
+
+### Names that are never set
+
+A `{name}` prints literally when the variable is unset, which makes a typo
+visible on screen. Two different things look identical that way, though — a
+misspelling, and a preview that started below the block which sets it — so the
+editor tells them apart without running anything: a name that **no `#set`
+anywhere in the document assigns**, whether it is read in a `{substitution}` or
+inside an `#if`, is reported as a warning against the line that reads it.
+
+A name assigned anywhere counts, in any block, in any order. The warning is
+therefore only ever about a name the story never mentions again — and it is a
+warning, not an error: the line runs exactly as written either way.
 
 ### Writing an assignment as text
 
@@ -320,7 +350,7 @@ A tag is `#name`, optionally followed by whitespace-separated arguments:
 `#delay 800`. Tags go at the end of any line, or on a line of their own. Several
 may share a line: `..... #speed 40 #delay 800`.
 
-There are **eight** tags, listed in `src/lib/tags.ts` — one entry each, holding
+There are **nine** tags, listed in `src/lib/tags.ts` — one entry each, holding
 everything about them. A name that is not in that list parses fine and is
 carried along, but nothing consumes it: an unknown tag is inert, which is the
 only way a tag is allowed to do nothing quietly.
@@ -344,10 +374,10 @@ A tag on a choice that opens a **sub-menu** acts as that sub-menu's header tags:
 it fires on entry and on every redraw of the sub-menu. That is how you get a
 sub-menu to clear itself.
 
-Two tags are restricted, because the missing positions would have no meaning:
-`#title` decorates a printed line and so is **text lines only**, and `#if`
-cannot sit on a **block header**. Writing them elsewhere is an error rather
-than a silent no-op.
+Three tags are restricted, because the missing positions would have no meaning:
+`#title` decorates a printed line and so is **text lines only**, `#if` cannot
+sit on a **block header**, and `#prelude` marks a whole block and so is **block
+headers only**. Writing them elsewhere is an error rather than a silent no-op.
 
 ### `#set <name> = <expression>`
 
@@ -372,6 +402,46 @@ Generator online #set generator = "on"
   expression does not parse, is an **error** rather than an inert tag.
 - Outside quotes the expression cannot contain `#` or `->`, because those end
   the tag's arguments. Inside them it can: `#set colour = "#ff0000"`.
+
+### `#prelude`
+
+Marks a block as **declarations rather than a screen**. Its `#set`s are applied
+once, before anything runs, however the story was started — and it is never
+entered, so it prints nothing and nothing diverts to it.
+
+```
+= defaults #prelude #theme library
+#set generator = "off"
+#set load = 34
+
+= boot #speed 5
+TRAC PC-9800 Series System Terminal
+-> main
+```
+
+It exists for the places a `#set` has nowhere good to live: a value read by a
+screen the player can reach without passing the block that sets it, and a
+preview restarted halfway down the document. A prelude belongs to no screen, so
+neither can miss it.
+
+- A prelude takes **declarations**: `#set` and `#if`, and the two **settings**,
+  `#theme` and `#speed`. A setting says how the story *is* until something
+  changes it, which needs no line to sit on.
+- A prelude is the **first** thing that runs, so anything later overrides it: a
+  `#speed 5` on the block the story opens at wins over a `#speed 18` declared
+  here, the moment that block is reached. Declare the story's setting in the
+  prelude and leave the block headers for the places you mean to depart from it.
+- It does **not** take a tag that acts on the line it is written on — `#clear`,
+  `#delay`, `#title`, `#password` — because a prelude has no lines. Each is an
+  error rather than a silent no-op.
+- It holds **tag lines only**. A line that would print is an error.
+- The story opens at the first block that is not a prelude, so a prelude at the
+  top of the document does not become the opening screen.
+- A `-> defaults` is an error: there is no screen there to arrive at.
+- Several are allowed and are applied in source order, so a later one wins.
+- Blank lines are fine; they are spacing in the source and print nothing.
+- Everything a prelude sets is an ordinary variable afterwards — the story
+  overwrites it as it likes, and a restart declares it again.
 
 ### `#if <expression>`
 
@@ -442,11 +512,13 @@ Airlock [closed] #delay
 Sets the typewriter speed — **higher is slower**. The default is `5`. `#speed 0`
 prints instantly.
 
-Unlike the others this is **sticky**: it applies to the line carrying it and to
-every line after, until another `#speed` or a restart. Put it on a block header
-to pace a whole screen, or on one line to slow a single flourish:
+Unlike most of the others this is **sticky**: it applies to the line carrying
+it and to every line after, until another `#speed` or a restart. Put it on a
+block header to pace a whole screen, on one line to slow a single flourish, or
+in a [`#prelude`](#prelude) to pace the story:
 
 ```
+= book #prelude #speed 18
 = boot #speed 5
 ......................... #speed 40
 ```
@@ -489,6 +561,15 @@ restart. An unknown name falls back to `crt` rather than blanking the screen.
 
 ```
 = wake #theme library
+```
+
+A story that is one look throughout should say so in a
+[`#prelude`](#prelude) instead, which is what `grimoire.lore` does. On a block
+header the theme is only set once that block is reached, so a preview started
+below it draws the book as a terminal:
+
+```
+= book #prelude #theme library
 ```
 
 ## Themes
@@ -534,6 +615,10 @@ The parser reports:
 - a line matching no form (`= 9lives`, `->`, `* Go #set x = 1 -> there`)
 - `Duplicate block name "x"`
 - `Unknown block "x"` — a divert whose target does not exist
+- `Cannot divert to the #prelude block "x"` — it is declarations, not a screen
+- `A #prelude block holds only tag lines`, and `#delay does nothing in a
+  #prelude block` — the same rule as below, applied to a block that has no
+  lines for a tag to act on
 - ``#set is written as `#set name = <expression>` `` — a tag whose arguments are
   not what it wants: too few, too many, a missing `=`, or an expression that
   does not parse (`#if x <`). Every tag in `tags.ts` carries the line quoted
@@ -543,6 +628,11 @@ The parser reports:
 
 The rule behind the last two: a tag the format knows about is never allowed to
 sit there doing nothing. Only an unrecognised tag is silently inert.
+
+One thing is reported as a **warning** rather than an error, in the same list
+but not in red: `"x" is never set anywhere in this story`, against every line
+that reads a name no `#set` assigns. See
+[names that are never set](#names-that-are-never-set).
 
 Two failures surface at runtime instead, on screen:
 

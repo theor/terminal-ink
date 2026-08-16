@@ -27,7 +27,10 @@
     --term-text-shadow: 0 0 1px rgba(58, 42, 24, 0.45);
     --term-choice-list: none;
     --term-choice-marker: "\2767  ";
-    --term-focus-open: "\2767  ";
+    /* A pointing hand replaces the fleuron on the choice the reader is on:
+       the marker used to be the same glyph either way, which left a keyboard
+       with nothing to show for having moved. */
+    --term-focus-open: "\261E  ";
     --term-focus-close: "";
     --term-prompt-marker: "\2014  ";
     --term-cursor-w: 0.09em;
@@ -35,12 +38,15 @@
     --term-cursor-anim: quill 1.4s ease-in-out infinite;
   }
 
+  /* Sized against the viewport the same way `.contained` is sized against the
+     pane: play mode is the book seen closer up, not a page with no book left
+     around it. */
   .fullscreen {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
+    display: flex;
     overflow: hidden;
+    container-type: size;
   }
   .contained {
     height: 100%;
@@ -62,6 +68,12 @@
     margin: auto;
     padding: 2cqw;
   }
+  .fullscreen .desk {
+    margin: auto;
+    /* Wider than the book by more than a hair: at full size a thin surround
+       reads as a vignette rather than as the table the book is lying on. */
+    padding: 7cqh;
+  }
 
   /* Tooled leather binding. */
   .book {
@@ -75,6 +87,9 @@
   }
   .contained .book {
     padding: 1.4cqw;
+  }
+  .fullscreen .book {
+    padding: 2.6cqh;
   }
 
   .page {
@@ -102,11 +117,10 @@
     height: 45cqw;
   }
   .fullscreen .page {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 999;
+    /* Whichever runs out first: the page has to be wide enough for its 62
+       columns, and the book around it has to fit down the screen. */
+    font-size: min(2.7cqw, 4.6cqh);
+    height: 78cqh;
   }
 
   /* Laid-paper grain: fine chain lines, no asset needed. */

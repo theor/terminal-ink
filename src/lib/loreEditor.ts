@@ -33,14 +33,14 @@ import {
 import { search, searchKeymap } from "@codemirror/search";
 import { tags } from "@lezer/highlight";
 import type { ParseError } from "./Parser.ts";
-import { TAGS } from "./tags.ts";
+import { TAGS, touchesState } from "./tags.ts";
 
 /**
  * Tags that touch story state, as opposed to the display. Built from the
  * registry, so a new tag highlights without an edit here.
  */
 const STATE_TAGS = new RegExp(
-  `#(${TAGS.filter((t) => t.apply || t.allows)
+  `#(${TAGS.filter(touchesState)
     .map((t) => t.name)
     .join("|")})\\b`
 );
@@ -169,7 +169,10 @@ const theme = EditorView.theme(
 export interface LoreEditor {
   /** Replaces the whole document, e.g. when another story is loaded. */
   setDoc(text: string): void;
-  /** Shows the parser's errors in the gutter and under the offending text. */
+  /**
+   * Shows the parser's errors and warnings in the gutter and under the
+   * offending text, each drawn according to its own severity.
+   */
   setErrors(errors: ParseError[]): void;
   /** Puts the cursor on an error and scrolls it into view. */
   goTo(error: ParseError): void;
@@ -226,7 +229,7 @@ export function createEditor(
     return {
       from: Math.min(line.from + error.column, line.to),
       to: line.to,
-      severity: "error",
+      severity: error.severity ?? "error",
       message: error.message,
     };
   };

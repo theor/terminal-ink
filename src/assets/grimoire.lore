@@ -1,6 +1,13 @@
 // A warded grimoire. Written to exercise the library theme.
 
-= wake #theme library #speed 18 #set volumes = "Three" #set candle = "lit"
+// What the book is, before a word of it is read: it is a book rather than a
+// terminal, it reads slowly, and the candle is lit. A preview started at any
+// shelf below gets all three.
+= defaults #prelude #theme library #speed 18
+#set volumes = "Three"
+#set candle = "lit"
+
+= wake
 
 The book is warm under your hand.
 

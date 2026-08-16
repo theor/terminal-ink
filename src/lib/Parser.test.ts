@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   blockAt,
+  firstScreen,
+  isPrelude,
   parse,
   segmentsToString,
   stringify,
@@ -409,6 +411,9 @@ test("over-indented lines are absorbed, not hung on", () => {
 
 test("round-trips through stringify", () => {
   const source = [
+    "= defaults #prelude",
+    "  #set generator = \"off\"",
+    "",
     "= main #clear #set generator = \"off\"",
     "  GRETA BASE #title",
     "  Generator: {generator}",
@@ -439,5 +444,150 @@ test("round-trips through stringify", () => {
       "C:\\Users\\theor",
     ],
     "the text survives the trip unchanged"
+  );
+});
+
+// --- names that are never set ---------------------------------------------
+
+test("warns about a variable no #set in the document assigns", () => {
+  const story = parse("= main\n  Generator: {genrator}\n  * ok\n");
+  assert.deepEqual(story.errors, [], "the line parses; it is only suspicious");
+  assert.deepEqual(
+    story.warnings.map((w) => [w.line, w.severity, w.message]),
+    [[1, "warning", '"genrator" is never set anywhere in this story']]
+  );
+});
+
+test("a name set anywhere is set everywhere, whatever the order", () => {
+  // The point of the check: `main` reads a variable `boot` assigns, and would
+  // read `{generator}` literally in a preview that starts at `main`. That is
+  // the preview's doing, not a typo, and must not be reported as one.
+  const story = parse(
+    [
+      "= main",
+      "  Generator: {generator}",
+      "  * ok",
+      "",
+      '= boot #set generator = "off"',
+      "  -> main",
+    ].join("\n")
+  );
+  assert.deepEqual(story.warnings, []);
+});
+
+test("expressions are read for names too", () => {
+  const story = parse(
+    ['= main #set load = spare + 1', '  Hot #if lod > 80', "  * ok"].join("\n")
+  );
+  assert.deepEqual(
+    story.warnings.map((w) => [w.line, w.message]),
+    [
+      [0, '"spare" is never set anywhere in this story'],
+      [1, '"lod" is never set anywhere in this story'],
+    ]
+  );
+});
+
+test("a choice label is read like any other line", () => {
+  const story = parse("= main\n  * Take the {wepon}\n");
+  assert.deepEqual(
+    story.warnings.map((w) => w.line),
+    [1]
+  );
+});
+
+test("a name is reported once per line, however often it is read", () => {
+  const story = parse("= main\n  {x} and {x} and {x}\n  * ok\n");
+  assert.equal(story.warnings.length, 1);
+});
+
+test("a #set written wrongly is one error, not an error and a warning", () => {
+  const story = parse("= main\n  #set x =\n  * ok\n");
+  assert.equal(story.errors.length, 1);
+  assert.deepEqual(story.warnings, [], "nothing to read names out of");
+});
+
+// --- #prelude -------------------------------------------------------------
+
+test("a prelude block is marked, and is not a screen", () => {
+  const story = parse('= defaults #prelude\n  #set load = 34\n\n= main\n  * ok\n');
+  assert.deepEqual(story.errors, []);
+  assert.equal(isPrelude(story.byName.get("defaults")!), true);
+  assert.equal(isPrelude(story.byName.get("main")!), false);
+  assert.equal(firstScreen(story)?.name, "main", "the story opens at main");
+});
+
+test("a prelude satisfies the never-set check", () => {
+  const story = parse(
+    '= defaults #prelude\n  #set generator = "off"\n\n= main\n  {generator}\n  * ok\n'
+  );
+  assert.deepEqual(story.warnings, []);
+});
+
+test("a prelude holds tag lines and nothing else", () => {
+  const story = parse(
+    [
+      "= defaults #prelude",
+      "  #set load = 34",
+      "",
+      "  Booting",
+      "  * Pick",
+      "  -> main",
+      "",
+      "= main",
+      "  * ok",
+    ].join("\n")
+  );
+  assert.deepEqual(
+    story.errors.map((e) => [e.line, e.message]),
+    [
+      [3, "A #prelude block holds only tag lines"],
+      [4, "A #prelude block holds only tag lines"],
+      [5, "A #prelude block holds only tag lines"],
+    ],
+    "a blank line is spacing in the source and passes"
+  );
+});
+
+test("a prelude takes settings, but not tags that act on a line", () => {
+  // The line is sticky against momentary, not state against display: `#speed`
+  // and `#theme` say how the story is, which is what a prelude is for.
+  const story = parse(
+    [
+      "= defaults #prelude #speed 40",
+      "  #theme library",
+      "  #set x = 1",
+      "  #clear",
+      "  #delay 800",
+      "  ENTER PASSWORD #password 123",
+      "",
+      "= main",
+      "  * ok",
+    ].join("\n")
+  );
+  assert.deepEqual(
+    story.errors.map((e) => [e.line, e.message]),
+    [
+      [3, "#clear does nothing in a #prelude block"],
+      [4, "#delay does nothing in a #prelude block"],
+      [5, "A #prelude block holds only tag lines"],
+    ]
+  );
+});
+
+test("#prelude is a block header and nowhere else", () => {
+  assert.deepEqual(
+    parse("= main\n  Text #prelude\n  * ok\n").errors.map((e) => e.message),
+    ["#prelude does nothing on a line of text"]
+  );
+});
+
+test("diverting into a prelude is an error, not an empty screen", () => {
+  const story = parse(
+    "= defaults #prelude\n  #set x = 1\n\n= main\n  * Go -> defaults\n"
+  );
+  assert.deepEqual(
+    story.errors.map((e) => [e.line, e.message]),
+    [[4, 'Cannot divert to the #prelude block "defaults"']]
   );
 });

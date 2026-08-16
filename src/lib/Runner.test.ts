@@ -351,6 +351,9 @@ const storySource = readFileSync(
 
 test("story.lore parses with no errors", () => {
   assert.deepEqual(parse(storySource).errors, []);
+  // Every name it reads is declared somewhere, so a preview started anywhere
+  // in it has real values to print.
+  assert.deepEqual(parse(storySource).warnings, []);
 });
 
 test("a full path through story.lore", () => {
@@ -396,6 +399,16 @@ test("a full path through story.lore", () => {
   assert.equal(r.currentBlock?.name, "main");
   assert.ok(lines(back).includes("Generator: on"), "state survives the trip back");
   assert.deepEqual(labels(back), ["Diagnostics", "Controls", "Comms", "Reboot"]);
+
+  // A reboot means a reboot: `boot` resets what the prelude declared, so the
+  // spent toggle is offered again. The prelude alone would not do this -- it
+  // runs on `start`, and rebooting is a divert.
+  r.select(3);
+  r.resume(true);
+  const rebooted = r.select(0);
+  assert.ok(lines(rebooted).includes("Generator [off]"));
+  assert.ok(lines(rebooted).includes("Core load [34%]"));
+  assert.deepEqual(labels(rebooted), ["Toggle generator", "Back"]);
 });
 
 const grimoireSource = readFileSync(
@@ -404,12 +417,13 @@ const grimoireSource = readFileSync(
 );
 
 test("grimoire.lore parses, and its multi-word value survives", () => {
+  assert.deepEqual(parse(grimoireSource).warnings, []);
   const r = runner(grimoireSource);
   r.start();
   const shelf = r.resume(true); // past the ward
   assert.ok(
     lines(shelf).includes("The candle is lit. Three volumes lie open before you."),
-    "both header #sets ran"
+    "the prelude ran, before a word of the book was printed"
   );
 
   const candle = r.select(2); // Attend to the candle
@@ -434,4 +448,136 @@ test("rebooting from the menu re-runs the boot sequence", () => {
   const reboot = r.select(3);
   assert.equal(reboot.pause?.tag.name, "password", "reboot gates on the password again");
   assert.ok(lines(reboot).includes("TRAC PC-9800 Series System Terminal"));
+});
+
+// --- #prelude -------------------------------------------------------------
+
+/** A story whose defaults live outside the flow that would set them. */
+const withPrelude = [
+  '= defaults #prelude',
+  '  #set generator = "off"',
+  "  #set load = 34",
+  "",
+  "= boot",
+  "  BOOTING",
+  "  -> main",
+  "",
+  "= main",
+  "  Generator: {generator} at {load}",
+  "  * ok",
+].join("\n");
+
+test("a prelude is applied wherever the story starts", () => {
+  assert.deepEqual(lines(runner(withPrelude).start()), [
+    "BOOTING",
+    "Generator: off at 34",
+  ]);
+  // The case this exists for: a preview restarted at a block halfway down the
+  // document, with none of the blocks above it having run.
+  const story = parse(withPrelude);
+  assert.deepEqual(lines(new Runner(story, "main").start()), [
+    "Generator: off at 34",
+  ]);
+});
+
+test("a prelude prints nothing and is not entered", () => {
+  const r = runner(withPrelude);
+  const step = r.start();
+  assert.equal(r.currentBlock?.name, "main", "the story opens past the prelude");
+  assert.equal(r.depth, 2, "boot and main; the prelude is not on the stack");
+  assert.deepEqual(
+    step.outputs.filter((o) => o.tags.some((t) => t.name === "prelude")),
+    [],
+    "nothing the prelude holds reaches the screen"
+  );
+});
+
+test("starting at a prelude runs the story instead", () => {
+  // The editor names the block the cursor is in, and the cursor may be sitting
+  // in the declarations.
+  const story = parse(withPrelude);
+  const r = new Runner(story, "defaults");
+  assert.deepEqual(lines(r.start()), ["BOOTING", "Generator: off at 34"]);
+});
+
+test("a prelude is re-applied on every start, and the story may overwrite it", () => {
+  const r = runner(withPrelude + '\n  * Turn on #set generator = "on"\n');
+  r.start();
+  r.select(1);
+  assert.deepEqual(r.vars.get("generator"), str("on"));
+  r.start();
+  assert.deepEqual(r.vars.get("generator"), str("off"), "a restart declares again");
+});
+
+test("several preludes are applied in source order", () => {
+  const r = runner(
+    [
+      "= a #prelude",
+      "  #set x = 1",
+      "",
+      "= b #prelude",
+      "  #set x = 2",
+      "",
+      "= main",
+      "  {x}",
+      "  * ok",
+    ].join("\n")
+  );
+  assert.deepEqual(lines(r.start()), ["2"]);
+});
+
+test("a story that is nothing but a prelude has no screen to open", () => {
+  const r = runner("= defaults #prelude\n  #set x = 1\n");
+  const step = r.start();
+  assert.deepEqual(lines(step), []);
+  assert.equal(step.halted, true);
+});
+
+test("a prelude carries the look as well as the state", () => {
+  // The reason a setting belongs in one: `#theme` on `wake` is lost by a
+  // preview that starts at `shelf`, and the book is drawn as a terminal.
+  const story = parse(
+    [
+      "= defaults #prelude #theme library",
+      "  #speed 18",
+      '  #set candle = "lit"',
+      "",
+      "= wake",
+      "  -> shelf",
+      "",
+      "= shelf",
+      "  The candle is {candle}.",
+      "  * ok",
+    ].join("\n")
+  );
+  const step = new Runner(story, "shelf").start();
+  const declared = step.outputs.flatMap((o) => o.tags).map((t) => t.name);
+  assert.deepEqual(
+    declared,
+    ["theme", "speed", "set"],
+    "the settings reach the terminal, and #prelude itself never does"
+  );
+  assert.deepEqual(lines(step), ["The candle is lit."]);
+  assert.deepEqual(
+    step.outputs.filter((o) => o.text !== null).length,
+    1,
+    "the settings ride outputs that print nothing"
+  );
+});
+
+test("#if in a prelude decides whether a declaration is made", () => {
+  // Preludes run top to bottom, so a line can condition on one above it.
+  // Everything else is unset at this point, which is the whole scope of it.
+  const source = (mode: string) =>
+    [
+      "= defaults #prelude",
+      `  #set mode = "${mode}"`,
+      '  #set hull = "breached" #if mode = "wreck"',
+      "",
+      "= main",
+      "  Hull: {hull}",
+      "  * ok",
+    ].join("\n");
+  assert.deepEqual(lines(runner(source("wreck")).start()), ["Hull: breached"]);
+  assert.deepEqual(lines(runner(source("calm")).start()), ["Hull: {hull}"]);
 });

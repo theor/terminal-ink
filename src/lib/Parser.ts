@@ -1,7 +1,13 @@
 import type { MatchResult } from "ohm-js";
 import grammar from "./grammar.ohm-bundle.js";
 import type { TerminalSemantics } from "./grammar.ohm-bundle.js";
-import { positionsOf, tagSpec, type TagPosition } from "./tags.ts";
+import {
+  isDeclaration,
+  positionsOf,
+  tagSpec,
+  varsOf,
+  type TagPosition,
+} from "./tags.ts";
 
 /** A run of literal text, or a `{variable}` to be substituted at runtime. */
 export type Segment =
@@ -62,6 +68,8 @@ export interface ParseError {
   /** 0-based column. */
   column: number;
   message: string;
+  /** Absent means an error. See `Story.warnings`. */
+  severity?: "error" | "warning";
 }
 
 export interface Story {
@@ -69,6 +77,12 @@ export interface Story {
   /** Blocks by name, for divert resolution. First wins on duplicates. */
   byName: Map<string, Block>;
   errors: ParseError[];
+  /**
+   * Things that are not wrong, only suspicious -- a variable no `#set`
+   * anywhere in the document assigns. Kept apart from `errors` because the
+   * story runs exactly as written either way; only the editor reads them.
+   */
+  warnings: ParseError[];
 }
 
 /** Name given to the implicit block wrapping content written before any `=`. */
@@ -227,7 +241,12 @@ function normalizeSegments(segments: Segment[]): Segment[] {
  * story -- which is what makes live-reparsing on each keystroke usable.
  */
 export function parse(source: string): Story {
-  const story: Story = { blocks: [], byName: new Map(), errors: [] };
+  const story: Story = {
+    blocks: [],
+    byName: new Map(),
+    errors: [],
+    warnings: [],
+  };
 
   // Stack of open containers. The bottom entry is the current block body.
   let stack: { indent: number; children: Node[] }[] = [];
@@ -333,23 +352,40 @@ export function parse(source: string): Story {
  * tag that means something must never sit in the output doing nothing quietly.
  */
 function validate(story: Story) {
+  /** Every name a `#set` anywhere in the document assigns. */
+  const assigned = new Set<string>();
+  /** Every name read, with the line to report it against. */
+  const used: { name: string; line: number }[] = [];
+
   const walk = (nodes: Node[]) => {
     for (const node of nodes) {
       checkTags(node.tags, node.line, positionOf(node));
+      if (node.kind === "text") readSegments(node.segments, node.line);
       if (node.kind === "divert") checkTarget(node.target, node.line);
       if (node.kind === "choice") {
+        readSegments(node.label, node.line);
         if (node.divert) checkTarget(node.divert, node.line);
         walk(node.children);
       }
     }
   };
+  const readSegments = (segments: Segment[], line: number) => {
+    for (const s of segments) {
+      if (s.kind === "var") used.push({ name: s.name, line });
+    }
+  };
   const checkTarget = (target: string, line: number) => {
-    if (isSpecialTarget(target) || story.byName.has(target)) return;
-    story.errors.push({
-      line,
-      column: 0,
-      message: `Unknown block "${target}"`,
-    });
+    if (isSpecialTarget(target)) return;
+    const block = story.byName.get(target);
+    if (!block) {
+      fail(line, `Unknown block "${target}"`);
+      return;
+    }
+    // A prelude holds declarations and prints nothing, so arriving in one is
+    // a screen with no output and no way on -- an author's slip, not a story.
+    if (isPrelude(block)) {
+      fail(line, `Cannot divert to the #prelude block "${target}"`);
+    }
   };
   const fail = (line: number, message: string) =>
     story.errors.push({ line, column: 0, message });
@@ -368,11 +404,60 @@ function validate(story: Story) {
       if (!positionsOf(spec).includes(position)) {
         fail(line, `#${tag.name} does nothing ${WHERE[position]}`);
       }
+      const { reads, writes } = varsOf(tag.name, tag.args);
+      for (const name of reads) used.push({ name, line });
+      for (const name of writes) assigned.add(name);
     }
   };
+
+  /**
+   * A prelude holds declarations: nothing it holds is ever printed, so a line
+   * that would print does not belong in one, and neither does a tag that acts
+   * on the line it is written on. A *setting* does belong -- `#theme` says
+   * what the story looks like, which is as much a declaration as `#set`.
+   */
+  const checkPrelude = (block: Block) => {
+    const idle = (tag: Tag) => {
+      const spec = tagSpec(tag.name);
+      return spec !== undefined && !isDeclaration(spec);
+    };
+    for (const tag of block.tags) {
+      if (idle(tag)) fail(block.line, `#${tag.name} does nothing in a #prelude block`);
+    }
+    for (const node of block.children) {
+      // A blank line is spacing in the source; there is no output for it to
+      // be spacing in here.
+      if (node.kind === "text" && node.segments.length === 0 && node.tags.length === 0) {
+        continue;
+      }
+      if (node.kind !== "directive") {
+        fail(node.line, "A #prelude block holds only tag lines");
+        continue;
+      }
+      for (const tag of node.tags) {
+        if (idle(tag)) fail(node.line, `#${tag.name} does nothing in a #prelude block`);
+      }
+    }
+  };
+
   for (const block of story.blocks) {
     checkTags(block.tags, block.line, "header");
     walk(block.children);
+    if (isPrelude(block)) checkPrelude(block);
+  }
+
+  // Last, so a name assigned anywhere counts -- a `{var}` may be read in a
+  // block above the one that sets it, and often is.
+  const reported = new Set<string>();
+  for (const { name, line } of used) {
+    if (assigned.has(name) || reported.has(`${line}:${name}`)) continue;
+    reported.add(`${line}:${name}`);
+    story.warnings.push({
+      line,
+      column: 0,
+      severity: "warning",
+      message: `"${name}" is never set anywhere in this story`,
+    });
   }
 }
 
@@ -420,6 +505,22 @@ export function blockAt(story: Story, line: number): Block | undefined {
 /** Divert targets handled by the runner rather than resolved to a block. */
 export function isSpecialTarget(target: string): boolean {
   return target === "back" || target === "end";
+}
+
+/**
+ * A block of declarations rather than a screen: its assignments are applied
+ * every time the story starts, wherever it starts, and it is never entered.
+ */
+export function isPrelude(block: Block): boolean {
+  return block.tags.some((tag) => tag.name === "prelude");
+}
+
+/**
+ * The block a story starts at when nothing names one. Not simply the first
+ * block, because a prelude is usually written at the top and is not a screen.
+ */
+export function firstScreen(story: Story): Block | undefined {
+  return story.blocks.find((b) => !isPrelude(b));
 }
 
 function columnOf(m: MatchResult): number {

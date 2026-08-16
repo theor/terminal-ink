@@ -86,6 +86,25 @@ export function parseExpr(source: string): Expr | null {
   return match.succeeded() ? (semantics(match).expr() as Expr) : null;
 }
 
+/**
+ * Every variable an expression reads, in source order. A name misspelt in an
+ * expression is as invisible at runtime as one misspelt in a `{substitution}`
+ * -- it is simply no answer -- so the parser checks both against the names the
+ * document assigns somewhere.
+ */
+export function varsIn(expr: Expr): string[] {
+  switch (expr.kind) {
+    case "var":
+      return [expr.name];
+    case "unary":
+      return varsIn(expr.operand);
+    case "binary":
+      return [...varsIn(expr.left), ...varsIn(expr.right)];
+    default:
+      return [];
+  }
+}
+
 // --- evaluation -----------------------------------------------------------
 
 export type Scope = ReadonlyMap<string, Value>;

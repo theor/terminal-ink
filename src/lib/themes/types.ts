@@ -9,6 +9,8 @@ export interface ThemeStrings {
   wrongPassword: string;
   /** Shown when the story has nowhere left to go. */
   end: string;
+  /** The one thing on screen before a play-mode page has been started. */
+  start: string;
   /** Decorates a `#title` line. */
   title: (text: string) => string;
 }

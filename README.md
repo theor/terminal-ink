@@ -26,12 +26,26 @@ toolbar — so writing a screen deep in the story shows you that screen rather
 than making you click down to it again after every edit. Untick it to run from
 the top. Nothing before the block ran, so variables it expects are unset.
 
+**fast** runs the preview with no pacing at all: lines appear whole and
+`#delay` waits for nothing. It is for walking a branch you are editing, not for
+reading the story as written -- leave it off to see what the table will see.
+
 **play** hides the editor and gives the terminal the whole screen: what the
 table should be looking at. The way back is a button in the top-left corner,
-invisible until hovered so it stays out of the fiction. The mode is in the URL,
+invisible until hovered so it stays out of the fiction -- or the browser's own
+back button, since the two modes are two entries in history. Choices are not:
+taking one is a move in the story, not a place to come back to. The mode is in the URL,
 so `http://<host>:5173/?play` opens the tablet straight into it -- and a page
 opened that way never downloads the editor at all, which is most of what this
-app ships.
+app ships. A page opened straight into play mode also waits to be started --
+one line on the screen and nothing else until a key or a tap -- so the tablet
+can be set down on the table long before anyone looks at it. Reaching play mode
+from the editor does not ask: that story is already running.
+
+Choices answer to the keyboard as well as to the mouse: **1**–**9** take one
+outright, **↑**/**↓** move the mark and **Enter** takes what it sits on. The
+mark is the theme's own -- `[brackets]` on the terminal, a pointing hand in the
+book. Keys typed in the editor stay in the editor.
 
 # The format
 
@@ -61,7 +75,7 @@ Generator: {generator}
 | `-> end` | stop |
 | `#set name = <expr>` | assign a variable. Text goes in quotes: `#set gen = "on"` |
 | `#if <expr>` | run this line only while the expression is true |
-| `{name}` | print a variable. An unset one prints as `{name}`. |
+| `{name}` | print a variable. An unset one prints as `{name}`, and a name no `#set` anywhere assigns is warned about in the editor. |
 | `\#` | print a reserved character literally |
 | `// ...` | comment |
 
@@ -82,7 +96,8 @@ rather than nesting.
 
 `#set` runs whenever it is executed, redraws included -- so initialisation
 belongs in a block you divert away from (like `boot`), not on a menu you return
-to.
+to. Starting values -- and the theme -- belong in a `#prelude` block, which is
+applied before anything runs and wherever the story is started from.
 
 Text lines are matched one at a time, so a line that does not parse is reported
 on its own and the rest of the story keeps running.
@@ -94,6 +109,10 @@ block header, where they run as the block is entered.
 
 - `#set <name> = <expression>` assigns a variable, and on a choice it fires when
   that choice is picked: `* Toggle #set gen = "on"`
+- `#prelude` on a block header marks it as declarations rather than a screen:
+  its `#set`s -- and its `#theme` and `#speed`, which are settings rather than
+  things that happen -- are applied before anything runs, however the story was
+  started, and the block itself is never entered
 - `#if <expression>` runs the line only when the expression is true. On a choice
   it decides whether the choice is offered at all; on a divert, whether the
   story goes there
@@ -117,7 +136,7 @@ CAUTION: CORE LOAD HIGH #if load > 80
 A bare word is a **variable**, so text goes in quotes. See
 [`FORMAT.md`](FORMAT.md#expressions).
 
-Those eight are the whole set, and each is defined in one place --
+Those nine are the whole set, and each is defined in one place --
 `src/lib/tags.ts` holds how a tag reads its arguments, where it may be written,
 what it does to the story and what it does to the screen. Adding one is an entry
 there. The grammar knows only that a tag is a name and some arguments -- not

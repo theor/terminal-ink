@@ -10,7 +10,24 @@
     runner,
     /** Cover the whole viewport (play mode) rather than sit inside a pane. */
     fullscreen = false,
-  }: { runner: Runner; fullscreen?: boolean } = $props();
+    /**
+     * Skip every pause the story asks for -- typing and `#delay` alike -- so an
+     * author checking a branch does not sit through its pacing. A testing
+     * control: nothing in a story can turn it on.
+     */
+    fast = false,
+    /**
+     * Wait for the player before running anything. A tablet opened straight
+     * into play mode sits on the table long before anyone is looking at it,
+     * and a story that boots to an empty screen has already been missed.
+     */
+    manualStart = false,
+  }: {
+    runner: Runner;
+    fullscreen?: boolean;
+    fast?: boolean;
+    manualStart?: boolean;
+  } = $props();
 
   interface Line {
     id: number;
@@ -24,6 +41,8 @@
 
   let lines = $state<Line[]>([]);
   let choices = $state<RunChoice[]>([]);
+  /** The keyboard's cursor into `choices`; Enter takes whatever it sits on. */
+  let selected = $state(0);
   let halted = $state(false);
   let password = $state<string | null>(null);
   let themeName = $state(DEFAULT_THEME);
@@ -40,6 +59,13 @@
   let generation = 0;
   let doneTyping: (() => void) | null = null;
 
+  /** Nothing has run yet and the player has not asked for it to. */
+  let awaitingStart = $state(false);
+  // Not $state: it only decides what the *next* restart does, and the wait is
+  // asked for once -- an author who has left play mode and is editing should
+  // not have to press start after every keystroke.
+  let started = false;
+
   $effect(() => {
     // Re-runs whenever the parent hands over a new Runner -- and only then.
     // Everything below both reads and writes the display state, so it has to
@@ -49,14 +75,26 @@
       generation += 1;
       lines = [];
       choices = [];
+      selected = 0;
       halted = false;
       password = null;
       themeName = DEFAULT_THEME;
       speed = DEFAULT_SPEED;
       doneTyping = null;
+      if (manualStart && !started) {
+        awaitingStart = true;
+        return;
+      }
+      awaitingStart = false;
       void drain(generation, r.start());
     });
   });
+
+  function begin() {
+    awaitingStart = false;
+    started = true;
+    void drain(generation, runner.start());
+  }
 
   function typed(): Promise<void> {
     return new Promise((resolve) => (doneTyping = resolve));
@@ -81,7 +119,7 @@
     // the story looks, not what it does.
     setTheme: (name) => (themeName = name),
     asHeading: () => (heading = true),
-    wait,
+    wait: (ms) => (fast ? Promise.resolve() : wait(ms)),
   };
 
   /** Runs one phase of whatever the tags on a line do to the display. */
@@ -110,7 +148,7 @@
             id: nextId++,
             text: heading ? theme.strings.title(output.text) : output.text,
             title: heading,
-            speed,
+            speed: fast ? 0 : speed,
           },
         ];
         await typed();
@@ -129,11 +167,12 @@
       password = (values as string[] | null)?.[0] ?? "";
     } else {
       choices = step.choices;
+      selected = 0;
     }
   }
 
   function choose(index: number) {
-    if (password !== null) return;
+    if (password !== null || index >= choices.length) return;
     const gen = generation;
     choices = [];
     void drain(gen, runner.select(index));
@@ -149,7 +188,12 @@
     if (entered.toLowerCase() !== (password ?? "").toLowerCase()) {
       lines = [
         ...lines,
-        { id: nextId++, text: theme.strings.wrongPassword, title: false, speed },
+        {
+          id: nextId++,
+          text: theme.strings.wrongPassword,
+          title: false,
+          speed: fast ? 0 : speed,
+        },
       ];
       return;
     }
@@ -158,10 +202,48 @@
     void drain(gen, runner.resume(true));
   }
 
-  function onChoiceKey(index: number) {
-    return (e: KeyboardEvent) => {
-      if (e.key === "Enter") choose(index);
-    };
+  /**
+   * The keyboard drives the story: a number takes that choice outright, the
+   * arrows move the cursor and Enter takes what it sits on.
+   *
+   * It listens on the window rather than on the terminal, so a player never
+   * has to click the screen before it answers -- and steps aside for anything
+   * editable, which is what stops a `2` typed in the editor next door from
+   * also picking the second choice.
+   */
+  function onKey(e: KeyboardEvent) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+
+    if (awaitingStart) {
+      // Any key a player would press to say "go", which is any key that types
+      // something plus Enter -- but not Tab, which is how they got here.
+      if (e.key.length === 1 || e.key === "Enter") {
+        e.preventDefault();
+        begin();
+      }
+      return;
+    }
+    // The password prompt is contenteditable, so it is already covered above;
+    // this is for the story having moved on while focus sat elsewhere.
+    if (password !== null || choices.length === 0) return;
+
+    if (e.key >= "1" && e.key <= "9") {
+      const index = Number(e.key) - 1;
+      if (index >= choices.length) return;
+      e.preventDefault();
+      choose(index);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : choices.length - 1;
+      selected = (selected + step) % choices.length;
+    } else if (e.key === "Enter") {
+      // Cancels the anchor's own activation as well: a focused choice is taken
+      // here, rather than here and again by the click the browser would send.
+      e.preventDefault();
+      choose(selected);
+    }
   }
 
   function toggleFullScreen() {
@@ -170,55 +252,68 @@
   }
 </script>
 
+<svelte:window onkeydown={onKey} />
+
 <Chrome {fullscreen}>
   <div class="content">
-    {#each lines as line (line.id)}
-      {#if line.title}
-        <!-- svelte-ignore a11y_missing_content -- the typewriter action fills it -->
-        <h3
-          use:typewriter={{
-            text: line.text,
-            speed: line.speed,
-            ondone: () => doneTyping?.(),
-          }}
-        ></h3>
-      {:else}
-        <p
-          use:typewriter={{
-            text: line.text,
-            speed: line.speed,
-            ondone: () => doneTyping?.(),
-          }}
-        ></p>
-      {/if}
-    {/each}
-
-    {#if password !== null}
-      <div
-        class="prompt"
-        inputmode={theme.passwordInputMode}
-        contenteditable="true"
-        tabindex="0"
-        role="textbox"
-        spellcheck="false"
-        onkeydown={onPasswordKey}
-      ></div>
-    {:else if halted && choices.length === 0}
-      <p class="halted">{theme.strings.end}</p>
+    {#if awaitingStart}
+      <button class="start" onclick={begin}>{theme.strings.start}</button>
     {:else}
-      <ol>
-        {#each choices as choice, i (choice.index)}
-          <li>
-            <a
-              href="#/"
-              role="button"
-              tabindex={i + 1}
-              onkeydown={onChoiceKey(i)}
-              onclick={() => choose(i)}>{choice.label}</a
-            >
-          </li>
-        {/each}
-      </ol>
+      {#each lines as line (line.id)}
+        {#if line.title}
+          <!-- svelte-ignore a11y_missing_content -- the typewriter action fills it -->
+          <h3
+            use:typewriter={{
+              text: line.text,
+              speed: line.speed,
+              ondone: () => doneTyping?.(),
+            }}
+          ></h3>
+        {:else}
+          <p
+            use:typewriter={{
+              text: line.text,
+              speed: line.speed,
+              ondone: () => doneTyping?.(),
+            }}
+          ></p>
+        {/if}
+      {/each}
+
+      {#if password !== null}
+        <div
+          class="prompt"
+          inputmode={theme.passwordInputMode}
+          contenteditable="true"
+          tabindex="0"
+          role="textbox"
+          spellcheck="false"
+          onkeydown={onPasswordKey}
+        ></div>
+      {:else if halted && choices.length === 0}
+        <p class="halted">{theme.strings.end}</p>
+      {:else}
+        <ol>
+          {#each choices as choice, i (choice.index)}
+            <li>
+              <a
+                href="#/"
+                role="button"
+                class:selected={i === selected}
+                tabindex={i + 1}
+                onfocus={() => (selected = i)}
+                onclick={(e) => {
+                  // A choice is a move in the story, not a place to come back
+                  // to: without this the href leaves a history entry and the
+                  // back button spends one press on it before leaving play.
+                  e.preventDefault();
+                  choose(i);
+                }}>{choice.label}</a
+              >
+            </li>
+          {/each}
+        </ol>
+      {/if}
     {/if}
   </div>
 </Chrome>
@@ -257,11 +352,26 @@
   .content a::before {
     content: var(--term-choice-marker, "");
   }
-  .content a:focus::before {
+  /* `.selected` is the keyboard's cursor and `:focus` is the browser's; they
+     are drawn the same because they mean the same thing -- and they are kept
+     on the same choice, so only ever one mark is on screen. */
+  .content a:is(:focus, .selected)::before {
     content: var(--term-focus-open, "");
   }
-  .content a:focus::after {
+  .content a:is(:focus, .selected)::after {
     content: var(--term-focus-close, "");
+  }
+
+  /* The story has not started. Styled as a line of the terminal rather than as
+     a button, because that is what it is standing in for. */
+  .start {
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    cursor: pointer;
   }
 
   .halted {

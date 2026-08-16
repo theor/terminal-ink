@@ -1,4 +1,6 @@
 import {
+  firstScreen,
+  isPrelude,
   type Block,
   type ChoiceNode,
   type Node,
@@ -6,7 +8,7 @@ import {
   type Story,
   type Tag,
 } from "./Parser.ts";
-import { tagSpec, type Vars } from "./tags.ts";
+import { isDeclaration, tagSpec, type Vars } from "./tags.ts";
 import { formatValue } from "./expr.ts";
 
 /**
@@ -110,7 +112,11 @@ export class Runner {
    */
   start(name = this.from): StepResult {
     const before = this.outputs.length;
-    const block = name ? this.story.byName.get(name) : this.story.blocks[0];
+    const named = name ? this.story.byName.get(name) : undefined;
+    // A prelude is not a screen, so a caller pointing at one -- the editor,
+    // with the cursor parked in the declarations -- gets the story's opening
+    // rather than an empty screen.
+    const block = named && !isPrelude(named) ? named : firstScreen(this.story);
     this.stack = [];
     this.cursor = null;
     this.choices = [];
@@ -120,8 +126,47 @@ export class Runner {
       this.halted = true;
       return this.result([]);
     }
+    this.applyPreludes();
     this.enter({ block }, "push");
     return this.run(before);
+  }
+
+  /**
+   * Declarations, applied before anything runs and wherever the story starts.
+   * This is the one thing that does not depend on the path taken to get here,
+   * which is what makes a variable -- or a theme -- survive a preview that
+   * starts halfway down the document, and what stops an initialising `#set` on
+   * a block header from being undone by that block's own redraws.
+   */
+  private applyPreludes() {
+    for (const block of this.story.blocks) {
+      if (!isPrelude(block)) continue;
+      this.emitDeclarations(block.tags);
+      for (const node of block.children) {
+        if (node.kind === "directive" && this.allowed(node.tags)) {
+          this.emitDeclarations(node.tags);
+        }
+      }
+    }
+  }
+
+  /**
+   * A prelude's tags. They are emitted, not merely applied, because a setting
+   * like `#theme` reaches the screen the same way every other tag does -- on
+   * an output that prints nothing.
+   *
+   * Only declarations are carried. `#prelude` itself is read off the block
+   * rather than run, and anything that acts on a line has no line here -- the
+   * parser rejects those, but a story that failed to parse is still run, so
+   * one that got through stops at this filter rather than firing early.
+   */
+  private emitDeclarations(tags: Tag[]) {
+    this.emitTags(
+      tags.filter((tag) => {
+        const spec = tagSpec(tag.name);
+        return spec !== undefined && isDeclaration(spec) && !spec.marker;
+      })
+    );
   }
 
   select(index: number): StepResult {

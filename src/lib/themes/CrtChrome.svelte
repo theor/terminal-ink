@@ -37,12 +37,15 @@
     --term-cursor-anim: cursor 1s infinite;
   }
 
+  /* Sized against the viewport the same way `.contained` is sized against the
+     pane, so play mode is the same monitor seen closer up -- rather than a
+     tube that has climbed out of its case and covered the room. */
   .fullscreen {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
+    display: flex;
     overflow: hidden;
+    container-type: size;
   }
   .contained {
     height: 100%;
@@ -60,13 +63,23 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: #3f3933;
-    border-radius: 0.5rem;
-    box-shadow: 0.6px 90px 110px -60px var(--term-bg); /* screen glow */
+    /* Moulded plastic: lit from above, dusty at the bottom. Flat colour read
+       as a grey rectangle once play mode made the case worth looking at. */
+    background: linear-gradient(180deg, #4b453e 0%, #3f3933 55%, #2c2723 100%);
+    border-radius: 0.6rem;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+      0 1.5rem 3rem rgba(0, 0, 0, 0.55),
+      0.6px 90px 110px -60px var(--term-bg); /* screen glow */
   }
   .contained .monitor {
     margin: auto;
     padding: 2cqw;
+  }
+  .fullscreen .monitor {
+    margin: auto;
+    padding: 3cqh;
   }
 
   /* The bezel. This used to be a border-image pointing at an asset that was
@@ -83,6 +96,9 @@
   }
   .contained .screen {
     padding: 1.5cqw;
+  }
+  .fullscreen .screen {
+    padding: 2.2cqh;
   }
 
   .tube {
@@ -108,11 +124,10 @@
     height: 45cqw;
   }
   .fullscreen .tube {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 999;
+    /* Whichever runs out first: 80 columns have to fit across the glass, and
+       the case around it has to fit down the screen. */
+    font-size: min(2.25cqw, 4.8cqh);
+    height: 78cqh;
   }
 
   /* Horizontal scan lines. */

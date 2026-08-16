@@ -15,7 +15,7 @@
  * Adding a tag means adding an entry here.
  */
 
-import { evaluate, parseExpr, type Expr, type Value } from "./expr.ts";
+import { evaluate, parseExpr, varsIn, type Expr, type Value } from "./expr.ts";
 
 export type Vars = Map<string, Value>;
 
@@ -106,6 +106,27 @@ export interface TagSpec<T = any> {
   /** Stops the runner until the player answers. */
   gate?: boolean;
   /**
+   * The tag says what kind of thing it is written on, rather than doing
+   * anything where it appears: `#prelude` marks a block the runner applies for
+   * its assignments instead of entering. Whoever cares looks the mark up, so
+   * there is nothing to run here -- but it is not inert either.
+   */
+  marker?: boolean;
+  /**
+   * Variable names the tag reads and assigns, for the parser's check that a
+   * name used anywhere is assigned somewhere. Declared here rather than read
+   * off the tag by the parser, which knows nothing about any particular tag.
+   */
+  reads?: (values: T) => string[];
+  writes?: (values: T) => string[];
+  /**
+   * The tag sets something that holds until it is set again, rather than
+   * acting on the line it sits on. A sticky tag is a *setting*, which is why
+   * one may be written in a `#prelude`: there is no line there for it to act
+   * on, but a setting does not need one.
+   */
+  sticky?: boolean;
+  /**
    * Changes the display. `before` runs ahead of the line the tag sits on,
    * `after` once that line has finished typing.
    */
@@ -127,6 +148,18 @@ export const TAGS: TagSpec[] = [
       const result = evaluate(value, vars);
       if (result) vars.set(name, result);
     },
+    reads: ({ value }) => varsIn(value),
+    writes: ({ name }) => [name],
+  },
+  {
+    name: "prelude",
+    bind: count(0),
+    marker: true,
+    // A whole block is marked, not a line: the point is a place to declare
+    // variables away from the story's flow, and a block is the only thing the
+    // format has that holds several lines.
+    positions: ["header"],
+    syntax: "#prelude, on a block header",
   },
   {
     name: "if",
@@ -142,6 +175,7 @@ export const TAGS: TagSpec[] = [
       const result = evaluate(expr, vars);
       return result?.kind === "boolean" && result.value;
     },
+    reads: (expr) => varsIn(expr),
   },
   {
     name: "clear",
@@ -170,6 +204,7 @@ export const TAGS: TagSpec[] = [
   {
     name: "speed",
     bind: count(1),
+    sticky: true,
     syntax: "#speed <milliseconds per character>",
     view: {
       phase: "before",
@@ -182,6 +217,7 @@ export const TAGS: TagSpec[] = [
   {
     name: "theme",
     bind: count(1),
+    sticky: true,
     syntax: "#theme <name>",
     view: {
       phase: "before",
@@ -207,6 +243,42 @@ export function tagSpec(name: string): TagSpec | undefined {
 
 export function positionsOf(spec: TagSpec): TagPosition[] {
   return spec.positions ?? ALL_POSITIONS;
+}
+
+/**
+ * Whether a tag touches story state rather than the display. These are the
+ * ones the editor colours as keywords.
+ */
+export function touchesState(spec: TagSpec): boolean {
+  return Boolean(spec.apply || spec.allows);
+}
+
+/**
+ * Whether a tag says how things *are*, rather than doing something at the
+ * point it is written -- which is exactly what may be declared in a `#prelude`
+ * block. State and settings qualify; `#clear`, `#delay`, `#title` and
+ * `#password` do not, because each acts on a line, and a prelude has none.
+ */
+export function isDeclaration(spec: TagSpec): boolean {
+  return touchesState(spec) || Boolean(spec.sticky) || Boolean(spec.marker);
+}
+
+/** Names a tag assigns, and names it reads. Empty for a tag that does neither. */
+export function varsOf(name: string, args: string[]): {
+  reads: string[];
+  writes: string[];
+} {
+  const spec = tagSpec(name);
+  const values = spec?.bind(args);
+  // A tag written wrongly is reported on its own; there is nothing to read
+  // names out of, and guessing would report a second error for the same typo.
+  if (!spec || values === null || values === undefined) {
+    return { reads: [], writes: [] };
+  }
+  return {
+    reads: spec.reads?.(values) ?? [],
+    writes: spec.writes?.(values) ?? [],
+  };
 }
 
 /**

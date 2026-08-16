@@ -85,7 +85,7 @@ test("#if binds to the whole expression, with no name in front", () => {
 test("a tag does something, or it should not be in the registry", () => {
   for (const spec of TAGS) {
     assert.ok(
-      spec.apply || spec.allows || spec.view || spec.gate,
+      spec.apply || spec.allows || spec.view || spec.gate || spec.marker,
       `${spec.name} is registered but has no effect`
     );
   }

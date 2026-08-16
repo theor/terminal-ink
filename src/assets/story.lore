@@ -1,5 +1,12 @@
 // Ported from story.ink. This is the Mothership session terminal.
 
+// Declared here as well as on `boot`, so a preview started at `diagnostics`
+// knows what the generator is doing without the boot sequence having run.
+// The two are different jobs: this one declares, `boot` resets.
+= defaults #prelude
+#set generator = "off"
+#set load = 34
+
 = boot #speed 5 #set generator = "off" #set load = 34
 TRAC PC-9800 Series System Terminal
 Reythorne OS Version 6.20

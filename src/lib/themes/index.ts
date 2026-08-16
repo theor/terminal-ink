@@ -15,6 +15,7 @@ export const themes: Record<string, Theme> = {
     strings: {
       wrongPassword: "ACCESS DENIED",
       end: "-- END OF LINE --",
+      start: "> PRESS ANY KEY TO CONNECT",
       title: (text) => `// ${text} //`,
     },
   },
@@ -26,6 +27,7 @@ export const themes: Record<string, Theme> = {
     strings: {
       wrongPassword: "The ward refuses you.",
       end: "~ here the text ends ~",
+      start: "❧  Open the book",
       title: (text) => text,
     },
   },
