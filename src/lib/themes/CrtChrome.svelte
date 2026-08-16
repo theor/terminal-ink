@@ -33,7 +33,7 @@
     --term-focus-close: "]";
     --term-prompt-marker: "> ";
     --term-cursor-w: 1rem;
-    --term-cursor-h: 1rem;
+    --term-cursor-h: 2.6cqw;
     --term-cursor-anim: cursor 1s infinite;
   }
 
