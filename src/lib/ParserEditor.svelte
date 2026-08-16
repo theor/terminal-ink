@@ -16,11 +16,12 @@
   /** The tags that touch story state, as opposed to the display. */
   const STATE_TAGS = TAGS.filter((t) => t.apply || t.allows).map((t) => t.name);
 
-  const STORIES: Record<string, string> = {
+  // $state so a loaded file can join the list and show up in the picker.
+  let stories = $state<Record<string, string>>({
     "story.term": storySource,
     "grimoire.term": grimoireSource,
-  };
-  const initialSource = STORIES["story.term"];
+  });
+  const initialSource = stories["story.term"];
 
   let storyName = $state("story.term");
   let source = $state(initialSource);
@@ -31,6 +32,7 @@
   let runner = $state(new Runner(parse(initialSource)));
 
   let divEl: HTMLDivElement = $state(null!);
+  let fileEl: HTMLInputElement = $state(null!);
   // $state so the marker effect below re-runs once Monaco has finished loading.
   let editor = $state<monaco.editor.IStandaloneCodeEditor | undefined>();
   let Monaco = $state<typeof monaco | undefined>();
@@ -41,8 +43,27 @@
 
   function loadStory(name: string) {
     storyName = name;
-    source = STORIES[name];
+    source = stories[name];
+    // Monaco holds its own copy of the text, so it has to be told.
     editor?.setValue(source);
+  }
+
+  function exportStory() {
+    const url = URL.createObjectURL(new Blob([source], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = storyName;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importStory(e: Event & { currentTarget: HTMLInputElement }) {
+    const file = e.currentTarget.files?.[0];
+    // Cleared so picking the same file twice still fires a change event.
+    e.currentTarget.value = "";
+    if (!file) return;
+    stories[file.name] = await file.text();
+    loadStory(file.name);
   }
 
   let firstParse = true;
@@ -143,11 +164,20 @@
         value={storyName}
         onchange={(e) => loadStory(e.currentTarget.value)}
       >
-        {#each Object.keys(STORIES) as name}
+        {#each Object.keys(stories) as name}
           <option value={name}>{name}</option>
         {/each}
       </select>
       <button onclick={restart}>restart preview</button>
+      <button onclick={() => fileEl.click()}>load</button>
+      <button onclick={exportStory}>export</button>
+      <input
+        bind:this={fileEl}
+        type="file"
+        accept=".term"
+        hidden
+        onchange={importStory}
+      />
     </div>
     <div bind:this={divEl} class="editor"></div>
     <ul class="errors" class:empty={errors.length === 0}>
