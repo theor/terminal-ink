@@ -398,6 +398,25 @@ function positionOf(node: Node): TagPosition {
   }
 }
 
+/**
+ * The block a source line falls inside: the last one whose header sits at or
+ * above it. A line above the first header still belongs to a block -- the
+ * implicit one -- so the answer is only empty for a story with no blocks.
+ *
+ * The result is a block, but a caller running it will go through `byName`,
+ * where a duplicate name resolves to the first of them. A cursor inside the
+ * second `= main` therefore names `main` and runs the first one.
+ */
+export function blockAt(story: Story, line: number): Block | undefined {
+  let found: Block | undefined;
+  // Blocks are pushed as the document is read, so they are in source order.
+  for (const block of story.blocks) {
+    if (block.line > line) break;
+    found = block;
+  }
+  return found ?? story.blocks[0];
+}
+
 /** Divert targets handled by the runner rather than resolved to a block. */
 export function isSpecialTarget(target: string): boolean {
   return target === "back" || target === "end";

@@ -75,6 +75,8 @@ function headerTagsOf(screen: Screen): Tag[] {
 
 export class Runner {
   readonly story: Story;
+  /** Block to run from, if not the first one in the document. */
+  readonly from: string | undefined;
   readonly vars: Vars = new Map();
 
   /** Screens the player has navigated into; the last one is current. */
@@ -86,8 +88,9 @@ export class Runner {
   choices: RunChoice[] = [];
   halted = false;
 
-  constructor(story: Story) {
+  constructor(story: Story, from?: string) {
     this.story = story;
+    this.from = from;
   }
 
   /** How deep the player has navigated. Exposed for `-> back` tests. */
@@ -99,8 +102,13 @@ export class Runner {
     return this.stack[this.stack.length - 1]?.block;
   }
 
-  /** Runs from the first block in the document. */
-  start(name?: string): StepResult {
+  /**
+   * Runs from the block the runner was built for, or the first one in the
+   * document. The name is carried on the runner rather than passed in here so
+   * that a caller holding only the runner -- the terminal -- cannot start it
+   * from somewhere other than where it was meant to start.
+   */
+  start(name = this.from): StepResult {
     const before = this.outputs.length;
     const block = name ? this.story.byName.get(name) : this.story.blocks[0];
     this.stack = [];

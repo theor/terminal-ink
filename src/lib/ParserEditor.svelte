@@ -3,9 +3,9 @@
   import type monaco from "monaco-editor";
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 
-  import storySource from "../assets/story.term?raw";
-  import grimoireSource from "../assets/grimoire.term?raw";
-  import { parse, type ParseError } from "./Parser.ts";
+  import storySource from "../assets/story.lore?raw";
+  import grimoireSource from "../assets/grimoire.lore?raw";
+  import { blockAt, parse, type ParseError } from "./Parser.ts";
   import { Runner } from "./Runner.ts";
   import { TAGS } from "./tags.ts";
   import Terminal from "./Terminal.svelte";
@@ -18,15 +18,31 @@
 
   // $state so a loaded file can join the list and show up in the picker.
   let stories = $state<Record<string, string>>({
-    "story.term": storySource,
-    "grimoire.term": grimoireSource,
+    "story.lore": storySource,
+    "grimoire.lore": grimoireSource,
   });
-  const initialSource = stories["story.term"];
+  const initialSource = stories["story.lore"];
 
-  let storyName = $state("story.term");
+  let storyName = $state("story.lore");
   let source = $state(initialSource);
   let story = $derived(parse(source));
   let errors = $derived(story.errors);
+
+  /**
+   * Play mode: the terminal alone, filling the screen, with the editor
+   * offstage. It is in the URL so the tablet at the table can be opened
+   * straight into it, and the choice links only touch the hash.
+   */
+  let play = $state(new URLSearchParams(location.search).has("play"));
+
+  /** Where the preview starts: the block the cursor is in, or the first one. */
+  let followCursor = $state(true);
+  let cursorLine = $state(0);
+  // The name rather than the block, so moving the cursor *within* a block
+  // leaves this unchanged and the preview is left alone.
+  let startName = $derived(
+    followCursor ? blockAt(story, cursorLine)?.name : undefined
+  );
 
   // Replaced -- not mutated -- so the Terminal restarts on a fresh Runner.
   let runner = $state(new Runner(parse(initialSource)));
@@ -38,7 +54,17 @@
   let Monaco = $state<typeof monaco | undefined>();
 
   function restart() {
-    runner = new Runner(story);
+    runner = new Runner(story, startName);
+  }
+
+  function setPlay(on: boolean) {
+    play = on;
+    // Leaving play mode is the first moment an editor is needed, if the page
+    // was opened straight into it.
+    if (!on) void loadEditor();
+    const url = new URL(location.href);
+    url.search = on ? "play" : "";
+    history.replaceState(null, "", url);
   }
 
   function loadStory(name: string) {
@@ -68,15 +94,17 @@
 
   let firstParse = true;
   $effect(() => {
-    // Editing restarts the preview from the top once typing settles. The very
-    // first parse is already running, so it is skipped.
+    // Editing -- or moving the cursor into another block -- restarts the
+    // preview once typing settles. The very first parse is already running, so
+    // it is skipped.
     const current = story;
+    const from = startName;
     if (firstParse) {
       firstParse = false;
       return;
     }
     const handle = setTimeout(() => {
-      runner = new Runner(current);
+      runner = new Runner(current, from);
     }, RESTART_DELAY);
     return () => clearTimeout(handle);
   });
@@ -107,11 +135,24 @@
     editor?.focus();
   }
 
-  onMount(() => {
+  /** Set once the editor has been asked for; the load happens only once. */
+  let loading: Promise<void> | undefined;
+
+  /**
+   * Monaco is by far the largest thing this app ships, and play mode never
+   * puts it on screen -- so a tablet opened straight into `?play` should not
+   * spend its first seconds downloading an editor nobody will look at.
+   *
+   * `editor.api` rather than `monaco-editor`: the latter contributes every
+   * built-in language, none of which is this one.
+   */
+  function loadEditor(): Promise<void> {
+    if (loading) return loading;
+
     // @ts-ignore -- Monaco reads this off the global.
     self.MonacoEnvironment = { getWorker: () => new editorWorker() };
 
-    const ready = import("monaco-editor").then((m) => {
+    loading = import("monaco-editor/esm/vs/editor/editor.api").then((m) => {
       Monaco = m;
       Monaco.languages.register({ id: "terminal" });
       Monaco.languages.setMonarchTokensProvider("terminal", {
@@ -148,16 +189,28 @@
       editor.onDidChangeModelContent(() => {
         source = editor!.getValue();
       });
+      editor.onDidChangeCursorPosition((e) => {
+        // Monaco counts lines from 1, the parser from 0.
+        cursorLine = e.position.lineNumber - 1;
+      });
     });
 
+    return loading;
+  }
+
+  onMount(() => {
+    if (!play) void loadEditor();
     return () => {
-      void ready.then(() => editor?.dispose());
+      void loading?.then(() => editor?.dispose());
     };
   });
 </script>
 
 <div class="split">
-  <div class="pane">
+  <!-- Kept on the page in play mode rather than unmounted, so Monaco holds its
+       text, cursor and undo history -- and given a size, because it lays itself
+       out against one. -->
+  <div class="pane" class:offstage={play}>
     <div class="toolbar">
       <select
         aria-label="story"
@@ -169,12 +222,17 @@
         {/each}
       </select>
       <button onclick={restart}>restart preview</button>
+      <label title="restart the preview at the block the cursor is in">
+        <input type="checkbox" bind:checked={followCursor} />
+        from {startName ?? "the top"}
+      </label>
+      <button onclick={() => setPlay(true)}>play</button>
       <button onclick={() => fileEl.click()}>load</button>
       <button onclick={exportStory}>export</button>
       <input
         bind:this={fileEl}
         type="file"
-        accept=".term"
+        accept=".lore"
         hidden
         onchange={importStory}
       />
@@ -192,9 +250,16 @@
   </div>
 
   <div class="pane preview">
-    <Terminal {runner} />
+    <Terminal {runner} fullscreen={play} />
   </div>
 </div>
+
+{#if play}
+  <!-- Invisible until hovered, like the terminal's own full-screen toggle: the
+       way out must be there without a control sitting on the screen the
+       players are looking at. -->
+  <button class="leave-play" title="edit" onclick={() => setPlay(false)}>e</button>
+{/if}
 
 <style>
   .split {
@@ -219,6 +284,14 @@
     gap: 0.75rem;
     padding: 0.25rem 0.5rem;
     font-size: 0.85rem;
+    /* The page has no colour of its own; until now the toolbar held nothing
+       but form controls, which bring theirs. */
+    color: #ccc;
+  }
+  .toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
   }
   .errors {
     flex: 0 0 auto;
@@ -245,5 +318,29 @@
   }
   .preview {
     overflow: hidden;
+  }
+
+  /* Off the side of the window rather than `display: none`: Monaco lays itself
+     out against the size it is given, and zero is not one. */
+  .offstage {
+    position: fixed;
+    top: 0;
+    left: -100vw;
+    width: 50vw;
+    height: 100vh;
+  }
+
+  .leave-play {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    width: 2rem;
+    border: none;
+    background-color: transparent;
+    color: transparent;
+    z-index: 1000;
+  }
+  .leave-play:hover {
+    color: var(--term-color, #fff);
   }
 </style>

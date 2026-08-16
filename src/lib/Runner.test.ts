@@ -30,6 +30,13 @@ test("runs a block and offers its choices", () => {
   assert.equal(step.halted, false);
 });
 
+test("starts at the block it was built for, not the first one", () => {
+  const source = "= boot\nBOOTING\n-> main\n\n= main\nGRETA BASE\n* One\n";
+  const story = parse(source);
+  assert.deepEqual(lines(new Runner(story).start()), ["BOOTING", "GRETA BASE"]);
+  assert.deepEqual(lines(new Runner(story, "main").start()), ["GRETA BASE"]);
+});
+
 test("substitutes variables, and leaves unset ones visible", () => {
   const r = runner("= main\n#set mode = \"SAFE\"\nMode: {mode} / {missing}\n* ok\n");
   assert.deepEqual(lines(r.start()), ["Mode: SAFE / {missing}"]);
@@ -338,15 +345,15 @@ test("a password gate stops execution until it is answered", () => {
 // --- the real story -------------------------------------------------------
 
 const storySource = readFileSync(
-  fileURLToPath(new URL("../assets/story.term", import.meta.url)),
+  fileURLToPath(new URL("../assets/story.lore", import.meta.url)),
   "utf8"
 );
 
-test("story.term parses with no errors", () => {
+test("story.lore parses with no errors", () => {
   assert.deepEqual(parse(storySource).errors, []);
 });
 
-test("a full path through story.term", () => {
+test("a full path through story.lore", () => {
   const r = runner(storySource);
 
   // boot -> start, stopping at the password rather than running on into main.
@@ -392,11 +399,11 @@ test("a full path through story.term", () => {
 });
 
 const grimoireSource = readFileSync(
-  fileURLToPath(new URL("../assets/grimoire.term", import.meta.url)),
+  fileURLToPath(new URL("../assets/grimoire.lore", import.meta.url)),
   "utf8"
 );
 
-test("grimoire.term parses, and its multi-word value survives", () => {
+test("grimoire.lore parses, and its multi-word value survives", () => {
   const r = runner(grimoireSource);
   r.start();
   const shelf = r.resume(true); // past the ward

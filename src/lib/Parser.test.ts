@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  blockAt,
   parse,
   segmentsToString,
   stringify,
@@ -354,6 +355,21 @@ test("reports unknown divert targets", () => {
 
 test("back and end are valid divert targets", () => {
   assert.deepEqual(parse("= main\n  * Back -> back\n  -> end\n").errors, []);
+});
+
+test("finds the block a line falls inside", () => {
+  //           0        1       2         3       4
+  const story = parse("= boot\nBOOTING\n\n= main\nGRETA BASE\n");
+  assert.equal(blockAt(story, 0)?.name, "boot");
+  assert.equal(blockAt(story, 2)?.name, "boot", "still inside boot");
+  assert.equal(blockAt(story, 3)?.name, "main", "the header itself");
+  assert.equal(blockAt(story, 99)?.name, "main", "past the end of the story");
+});
+
+test("a line above the first header falls inside the implicit block", () => {
+  const story = parse("// a note\nBOOTING\n= main\n");
+  assert.equal(blockAt(story, 0)?.name, IMPLICIT_BLOCK);
+  assert.equal(blockAt(parse(""), 0), undefined, "nothing to fall inside");
 });
 
 test("reports duplicate block names", () => {

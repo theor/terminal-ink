@@ -1,4 +1,4 @@
-# The `.term` format
+# The `.lore` format
 
 Reference for the story format this terminal runs. `src/lib/grammar.ohm` is the
 authority on syntax; this document explains what the syntax *means* and how to
@@ -38,20 +38,26 @@ Generator: {generator}
 * Reboot -> boot
 ```
 
-Two working stories ship in `src/assets/`: `story.term` (a Mothership session
-terminal) and `grimoire.term` (a warded book, exercising the library theme).
+Two working stories ship in `src/assets/`: `story.lore` (a Mothership session
+terminal) and `grimoire.lore` (a warded book, exercising the library theme).
 
 ### The edit loop
 
 You write in the left-hand pane and watch the terminal on the right. Half a
-second after your typing settles the preview **restarts from the first block** —
-it is a fresh run, not a hot patch, so variables, theme and speed all reset.
+second after your typing settles the preview **restarts** — it is a fresh run,
+not a hot patch, so variables, theme and speed all reset.
 
-Testing a screen five diverts deep therefore means clicking back down to it after
-every edit, re-entering any `#password` on the way. Two habits make that
-bearable: draft a new screen as the *first* block in the document and move it
-into place once it reads right, or comment out the gate while you work on what is
-behind it.
+It restarts at **the block the cursor is in**, named in the toolbar as
+`from <block>`. A screen five diverts deep is therefore on screen as you edit
+it, with nothing to click back down through and no `#password` to re-enter on
+the way. What it costs is everything that would have run first: a variable some
+earlier block `#set`s is unset here, and prints as `{name}`. Untick the box to
+run from the top instead — which is how you check an opening, a gate, or a
+screen whose text depends on how the player got there.
+
+Moving around inside one block changes nothing. The preview only restarts when
+the cursor lands in a *different* block, so scrolling and editing in place leave
+the terminal alone.
 
 ## Lines (the grammar)
 
@@ -153,7 +159,7 @@ Two places escapes do **not** reach:
 ## Blocks and flow
 
 **The story starts at the first block in the document.** Not at a block named
-`start` — the name is not special. `story.term` opens on `boot` and *also*
+`start` — the name is not special. `story.lore` opens on `boot` and *also*
 contains a block called `start`, which is reached only by the `-> start` at the
 end of `boot`.
 

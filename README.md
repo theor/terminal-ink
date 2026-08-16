@@ -1,8 +1,8 @@
-# Terminal
+# Lore Weaver
 
 A fake terminal for TTRPGs. I use it to run [Mothership](https://www.tuesdayknightgames.com/pages/mothership-rpg) sessions.
 
-The terminal is scripted in a small format of its own (`.term`). It used to be
+The terminal is scripted in a small format of its own (`.lore`). It used to be
 driven by Inkle's [Ink](https://github.com/inkle/ink), but Ink is built for
 stories -- branching prose that moves forward -- whereas a terminal is a set of
 screens you navigate, redraw, and come back to. The format here is built around
@@ -18,8 +18,20 @@ live.
 - `yarn && yarn dev`
 - edit the story in the left-hand pane; the terminal on the right restarts as you type
 
-`src/assets/story.term` is what the editor opens with; the dropdown in the
-toolbar switches to `grimoire.term`, a short example of the library theme.
+`src/assets/story.lore` is what the editor opens with; the dropdown in the
+toolbar switches to `grimoire.lore`, a short example of the library theme.
+
+The preview restarts at **the block the cursor is in** — `from <block>` in the
+toolbar — so writing a screen deep in the story shows you that screen rather
+than making you click down to it again after every edit. Untick it to run from
+the top. Nothing before the block ran, so variables it expects are unset.
+
+**play** hides the editor and gives the terminal the whole screen: what the
+table should be looking at. The way back is a button in the top-left corner,
+invisible until hovered so it stays out of the fiction. The mode is in the URL,
+so `http://<host>:5173/?play` opens the tablet straight into it -- and a page
+opened that way never downloads the editor at all, which is most of what this
+app ships.
 
 # The format
 
