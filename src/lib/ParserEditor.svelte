@@ -8,6 +8,7 @@
     canShare,
     load,
     save,
+    saveToDisk,
     shareLink,
     takeShared,
     type Stories,
@@ -169,6 +170,39 @@
     return () => clearTimeout(handle);
   });
 
+  $effect(() => {
+    // The dev-server workflow: what is typed here is written back to the
+    // `.lore` file it came from, not just kept in this browser -- so the copy
+    // on disk is never behind what is on screen. `receiveSync` below is the
+    // other half: what this write lands on disk, every tab -- including this
+    // one -- hears about, so this is a plain write with no echo to guard
+    // against here.
+    const text = source;
+    const name = storyName;
+    const handle = setTimeout(() => saveToDisk(name, text), RESTART_DELAY);
+    return () => clearTimeout(handle);
+  });
+
+  /** Must match the event name `vite.config.ts` sends. */
+  const SYNC_EVENT = "lore-sync:update";
+
+  /**
+   * The other end of `saveToDisk`: a `.lore` file changed on disk -- this
+   * tab's own write landing, another tab's, or a straight edit in some other
+   * editor -- and the dev server is passing along what it now holds. A tab
+   * already showing this exact text has nothing to do; this is what makes a
+   * tab's own write a no-op here rather than a jolt to whatever it is doing
+   * with the cursor. Any other tab open on the same story updates in place --
+   * `editor.setDoc`, the same call a switch in the dropdown makes.
+   */
+  function receiveSync({ name, source: text }: { name: string; source: string }) {
+    if (stories[name] === text) return;
+    stories[name] = text;
+    if (name !== storyName) return;
+    source = text;
+    editor?.setDoc(text);
+  }
+
   function exportStory() {
     const url = URL.createObjectURL(new Blob([source], { type: "text/plain" }));
     const link = document.createElement("a");
@@ -328,9 +362,13 @@
     const onPopState = () =>
       showPlay(new URLSearchParams(location.search).has("play"));
     window.addEventListener("popstate", onPopState);
+    // Only present under `vite dev`, which is the only place a `.lore` file
+    // on disk is a thing that changes out from under this page at all.
+    import.meta.hot?.on(SYNC_EVENT, receiveSync);
     return () => {
       window.removeEventListener("hashchange", receiveShared);
       window.removeEventListener("popstate", onPopState);
+      import.meta.hot?.off(SYNC_EVENT, receiveSync);
       void loading?.then(() => editor?.destroy());
     };
   });

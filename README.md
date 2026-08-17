@@ -67,8 +67,16 @@ keeps the edits rather than re-reading the file.
 Only stories you have *changed* are kept. A built-in you have not touched goes
 on coming from the bundle, which is what lets you edit `src/assets/story.lore`
 on disk and still see it in a browser that has been open all along -- the
-dev-server workflow above. Type a change and your copy shadows the file; undo
-back to the original text and it stops.
+dev-server workflow above.
+
+Under `yarn dev` it also runs the other way: typing into a built-in writes the
+change straight back to the `.lore` file it came from, so the file on disk
+never falls behind what is on screen -- open it in an editor of your own
+alongside the browser and it stays current. Outside that workflow -- a built
+app, or a story with no file behind it, like one that arrived by link or by
+import -- there is nowhere to write a change back to, so it goes on being kept
+in the browser alone, shadowing the bundle until you undo back to its original
+text.
 
 **share** puts the whole story in a link -- in the `#fragment`, so it is never
 sent to a server and never turns up in a host's logs. There is nothing to sign

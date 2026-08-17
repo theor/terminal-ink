@@ -64,6 +64,27 @@ export function load(): { stories: Stories; selected: string } {
   }
 }
 
+/** Where {@link saveToDisk} sends a builtin's text; see `vite.config.ts`. */
+const SAVE_PATH = "/__lore/save";
+
+/**
+ * Writes a builtin's current text back to the `.lore` file it was bundled
+ * from. Only the dev server has anything listening on {@link SAVE_PATH}, and
+ * only a story that actually came from one of those files has a file to
+ * write to -- a link or an imported file has neither, and stays put in
+ * {@link save} alone.
+ *
+ * Fire-and-forget, the same as `save` above: a page that is not being served
+ * by `vite dev`, or a write that fails for some reason of its own, should
+ * leave the editor exactly as usable as one where it succeeded.
+ */
+export function saveToDisk(name: string, source: string) {
+  if (!import.meta.env.DEV || !(name in builtins)) return;
+  fetch(SAVE_PATH, { method: "POST", body: JSON.stringify({ name, source }) }).catch(
+    () => {}
+  );
+}
+
 export function save(stories: Stories, selected: string) {
   // A built-in nobody has touched is not stored. It comes from the bundle, so
   // leaving it there is what lets `src/assets/story.lore` be edited on disk
