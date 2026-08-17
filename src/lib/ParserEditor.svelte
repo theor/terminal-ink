@@ -106,9 +106,33 @@
    * with Escape or F11, and nothing here would hear about it.
    */
   function toggleFullscreen() {
+    // However the screen gets filled, the offer below has been answered.
+    offerFullscreen = false;
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen();
   }
+
+  /**
+   * The corner `f` is invisible until it is hovered, which is no way to find
+   * out that filling the screen is an option at all -- so play mode says so
+   * once, in a strip below the monitor, and then never again.
+   *
+   * Never again means this page load: the answer is held in memory and
+   * nowhere else, so nothing is stored on the tablet and a refresh is a fresh
+   * offer. Not $state, because it only decides whether the *next* arrival in
+   * play mode offers anything.
+   */
+  let offered = false;
+  let offerFullscreen = $state(false);
+
+  $effect(() => {
+    // Keyed on `play` rather than sat inside setPlay, because a page opened
+    // straight into ?play never goes through it -- and that is the arrival
+    // this is mostly for.
+    if (!play || offered) return;
+    offered = true;
+    offerFullscreen = fullscreenEnabled && !document.fullscreenElement;
+  });
 
   function loadStory(name: string) {
     storyName = name;
@@ -271,6 +295,16 @@
       >f</button
     >
   {/if}
+  {#if offerFullscreen}
+    <!-- Under the monitor rather than over it: the case has room around it in
+         play mode, and an offer that covers the story it is offering to
+         improve has already failed. -->
+    <div class="offer">
+      <span>the story reads better with the screen to itself</span>
+      <button class="go" onclick={toggleFullscreen}>fullscreen</button>
+      <button onclick={() => (offerFullscreen = false)}>not now</button>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -416,5 +450,47 @@
   }
   .fill {
     right: 1rem;
+  }
+
+  /* The one thing in play mode that is drawn without being asked for, so it
+     is drawn quietly: the toolbar's greys, at the bottom of the surround,
+     narrow enough to sit in it. */
+  .offer {
+    position: fixed;
+    bottom: 0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0.35rem 0.35rem 0.35rem 0.8rem;
+    border: 1px solid #2b2b2b;
+    border-radius: 999px;
+    background: #191919;
+    color: #999;
+    font-size: 0.85rem;
+  }
+  .offer button {
+    font: inherit;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid #3a3a3a;
+    border-radius: 999px;
+    background: #262626;
+    color: #ddd;
+    cursor: pointer;
+  }
+  /* The green of the CRT, on the one control the offer is actually for. */
+  .offer button.go {
+    border-color: #5bf870;
+    color: #5bf870;
+  }
+  .offer button:hover {
+    background: #2f2f2f;
+  }
+  .offer button:focus-visible {
+    outline: 2px solid #5bf870;
+    outline-offset: 1px;
   }
 </style>

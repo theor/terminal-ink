@@ -219,11 +219,22 @@
    * has to click the screen before it answers -- and steps aside for anything
    * editable, which is what stops a `2` typed in the editor next door from
    * also picking the second choice.
+   *
+   * It steps aside for a focused control for the same reason: Enter on the
+   * fullscreen button is meant for the button, and taking it here would start
+   * the story (or pick a choice) instead of pressing what the player is
+   * looking at. The choices themselves are anchors, so they keep their own
+   * Enter handling below.
    */
   function onKey(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement | null;
-    if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+    if (
+      target?.closest(
+        'input, textarea, [contenteditable="true"], button, select'
+      )
+    )
+      return;
 
     if (awaitingStart) {
       // Any key a player would press to say "go", which is any key that types
