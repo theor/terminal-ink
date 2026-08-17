@@ -32,8 +32,12 @@
     --term-focus-open: "[";
     --term-focus-close: "]";
     --term-prompt-marker: "> ";
-    --term-cursor-w: 1rem;
-    --term-cursor-h: 2.6cqw;
+    /* One character cell. In `ch`/`em` rather than `rem`/`cqw` so the block
+       stays the size of a character at every tube size: the old width was a
+       fixed 12px whether the glass was in a pane or filling a wall, and the
+       old height was measured against the container while the font was not. */
+    --term-cursor-w: 1ch;
+    --term-cursor-h: 1em;
     --term-cursor-anim: cursor 1s infinite;
   }
 

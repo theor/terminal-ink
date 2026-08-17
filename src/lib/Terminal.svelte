@@ -178,6 +178,15 @@
     void drain(gen, runner.select(index));
   }
 
+  /**
+   * Takes the keyboard the moment the prompt appears. A password is the one
+   * point where the story wants typing rather than a choice, and a player who
+   * has to find and click the line first has already typed into nothing.
+   */
+  function focusOnShow(node: HTMLElement) {
+    node.focus();
+  }
+
   function onPasswordKey(e: KeyboardEvent) {
     if (e.key !== "Enter") return;
     e.preventDefault();
@@ -245,11 +254,6 @@
       choose(selected);
     }
   }
-
-  function toggleFullScreen() {
-    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-    else document.exitFullscreen();
-  }
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -289,6 +293,7 @@
           role="textbox"
           spellcheck="false"
           onkeydown={onPasswordKey}
+          use:focusOnShow
         ></div>
       {:else if halted && choices.length === 0}
         <p class="halted">{theme.strings.end}</p>
@@ -318,8 +323,6 @@
   </div>
 </Chrome>
 
-<button class="toggle-fullscreen" onclick={toggleFullScreen}>f</button>
-
 <style>
   /* Everything here is written against the theme's custom properties. A theme
      that wants something the properties cannot express styles it from its own
@@ -333,6 +336,11 @@
     word-break: break-word;
     color: var(--term-color);
     font-family: var(--term-font);
+    /* Pinned rather than left at `normal`: the caret below is sized against it,
+       and `normal` is whatever metrics the font that actually loaded happens to
+       have -- which is not the same on a machine that fell back to a system
+       font as on one that got the woff2. */
+    line-height: var(--term-line-height, 1.1);
     text-transform: var(--term-transform, none);
     text-shadow: var(--term-text-shadow, none);
     animation: var(--term-text-anim, none);
@@ -396,42 +404,39 @@
   .prompt::before {
     content: var(--term-prompt-marker, "> ");
   }
-  .prompt:focus::after {
-    content: " ";
-    display: inline-block;
-    width: var(--term-cursor-w, 1em);
-    height: var(--term-cursor-h, 1em);
-    background: var(--term-color);
-    animation: var(--term-cursor-anim);
-  }
+  /* The caret, in both places it appears: at the end of the line being typed
+     and at the prompt. Sized in `em`/`ch` so it stays the same size *relative
+     to the text* on every screen, and sat on the bottom of the line box rather
+     than on the baseline -- so as long as it is no taller than the line-height
+     above, it cannot grow the line it sits on. That is the whole rule: keep
+     --term-cursor-h under --term-line-height. Aligning to the baseline put its
+     full height above the baseline and made every line taller while it was
+     being typed than once it was done; aligning to `text-bottom` instead reads
+     the font's own metrics, and IM Fell's descent hangs below the line box.
 
-  /* .typewriter is added by the action at runtime, so it has to be :global --
+     .typewriter is added by the action at runtime, so it has to be :global --
      scoped under .content it still cannot leak out of the terminal. */
+  .prompt:focus::after,
   .content :global(.typewriter)::after {
     content: " ";
     display: inline-block;
-    width: var(--term-cursor-w, 1rem);
-    height: var(--term-cursor-h, 1rem);
+    width: var(--term-cursor-w, 0.5em);
+    height: var(--term-cursor-h, 1em);
+    vertical-align: bottom;
     background: var(--term-color);
   }
+  .prompt:focus::after {
+    /* The prompt is a flex row, so its caret is a flex item rather than part of
+       a line box: it holds its own width open, and only it blinks -- a caret
+       running ahead of the text as it types does not need announcing. */
+    flex: 0 0 var(--term-cursor-w, 0.5em);
+    animation: var(--term-cursor-anim);
+  }
+
 
   .content ::selection {
     background: var(--term-color);
     color: var(--term-bg);
     text-shadow: none;
-  }
-
-  .toggle-fullscreen {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    width: 2rem;
-    border: none;
-    background-color: transparent;
-    color: transparent;
-    z-index: 1000;
-  }
-  .toggle-fullscreen:hover {
-    color: var(--term-color, #fff);
   }
 </style>

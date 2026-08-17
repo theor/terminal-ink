@@ -94,6 +94,22 @@
     history.pushState(null, "", url);
   }
 
+  /**
+   * Filling the screen is the browser's own, so the button is only worth
+   * drawing where the browser will answer -- an iframe or a kiosk that has
+   * turned it off would otherwise get a control that does nothing.
+   */
+  const fullscreenEnabled = document.fullscreenEnabled;
+
+  /**
+   * Read fresh on each press rather than tracked: the player can also leave
+   * with Escape or F11, and nothing here would hear about it.
+   */
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen();
+  }
+
   function loadStory(name: string) {
     storyName = name;
     source = stories[name];
@@ -244,10 +260,17 @@
 </div>
 
 {#if play}
-  <!-- Invisible until hovered, like the terminal's own full-screen toggle: the
-       way out must be there without a control sitting on the screen the
-       players are looking at. -->
-  <button class="leave-play" title="edit" onclick={() => setPlay(false)}>e</button>
+  <!-- The two things play mode can do, one in each top corner and both
+       invisible until hovered: the way out, and the way to fill the screen.
+       They have to be reachable without a control sitting on the screen the
+       players are looking at. Neither exists in the editor, where the toolbar
+       is already the way in and the window is already the size it is. -->
+  <button class="corner leave" title="edit" onclick={() => setPlay(false)}>e</button>
+  {#if fullscreenEnabled}
+    <button class="corner fill" title="fullscreen" onclick={toggleFullscreen}
+      >f</button
+    >
+  {/if}
 {/if}
 
 <style>
@@ -372,17 +395,26 @@
     height: 100vh;
   }
 
-  .leave-play {
+  /* Both play-mode controls: a letter in a corner that is not drawn until it
+     is wanted. Transparent rather than hidden, so the space it occupies is
+     the same before and after -- and it stays clickable, which is what makes
+     hovering the corner enough to find it. */
+  .corner {
     position: fixed;
     top: 1rem;
-    left: 1rem;
     width: 2rem;
     border: none;
     background-color: transparent;
     color: transparent;
     z-index: 1000;
   }
-  .leave-play:hover {
+  .corner:is(:hover, :focus-visible) {
     color: var(--term-color, #fff);
+  }
+  .leave {
+    left: 1rem;
+  }
+  .fill {
+    right: 1rem;
   }
 </style>
