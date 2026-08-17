@@ -26,8 +26,10 @@ live.
 - `yarn && yarn dev`
 - edit the story in the left-hand pane; the terminal on the right restarts as you type
 
-`src/assets/story.lore` is what the editor opens with; the dropdown in the
-toolbar switches to `grimoire.lore`, a short example of the library theme.
+`src/assets/story.lore` is what the editor opens with the first time; the
+dropdown in the toolbar switches to `grimoire.lore`, a short example of the
+library theme. After that it opens with whatever you were last looking at --
+see [Keeping and sharing](#keeping-and-sharing).
 
 The preview restarts at **the block the cursor is in** — `from <block>` in the
 toolbar — so writing a screen deep in the story shows you that screen rather
@@ -54,6 +56,49 @@ Choices answer to the keyboard as well as to the mouse: **1**–**9** take one
 outright, **↑**/**↓** move the mark and **Enter** takes what it sits on. The
 mark is the theme's own -- `[brackets]` on the terminal, a pointing hand in the
 book. Keys typed in the editor stay in the editor.
+
+# Keeping and sharing
+
+What you type is kept in the browser you typed it in, so a refresh, a closed
+tab or a laptop that slept at the table does not cost an evening's writing.
+The dropdown remembers which story you were on, and switching away and back
+keeps the edits rather than re-reading the file.
+
+Only stories you have *changed* are kept. A built-in you have not touched goes
+on coming from the bundle, which is what lets you edit `src/assets/story.lore`
+on disk and still see it in a browser that has been open all along -- the
+dev-server workflow above. Type a change and your copy shadows the file; undo
+back to the original text and it stops.
+
+**share** puts the whole story in a link -- in the `#fragment`, so it is never
+sent to a server and never turns up in a host's logs. There is nothing to sign
+into and nothing to be up: the story travels in the URL itself. A story of the
+size here is about 1KB of link.
+
+A link is a **snapshot**. It says what the story was when the link was made,
+and it goes on saying that after you have moved on; the two ends never talk
+again. Edit and send a new one.
+
+Opening a link is an import, not a takeover: the story lands in the dropdown
+beside whatever that browser already had, under a free name, and gets
+selected. Nothing is written over, so following your own link on the machine
+the stories live on costs nothing -- and following the same link twice picks
+the story already there rather than piling up copies. The fragment is cleared
+once the story is out of it.
+
+`?play` and a link compose, so `?play#lore=...` opens a tablet straight into a
+story it has never seen -- waiting for a tap, and still without downloading the
+editor.
+
+A link that arrives cut short -- shortened by whatever carried it, most
+likely -- says so rather than leaving the device quietly running the story it
+already had, which from across a table looks exactly like success. It says so
+in play mode too, where the toolbar that would otherwise carry the news is off
+the side of the window. The URL is left as it came, so a reload can try again.
+
+Where a browser will not hand over the clipboard -- which includes the plain
+`http://` dev server this is mostly run from -- the link appears in the toolbar
+instead, selected and ready to copy.
 
 # The format
 

@@ -1,24 +1,32 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
 
-  import storySource from "../assets/story.lore?raw";
-  import grimoireSource from "../assets/grimoire.lore?raw";
   import { blockAt, isPrelude, parse, type ParseError } from "./Parser.ts";
   import { Runner } from "./Runner.ts";
+  import {
+    addStory,
+    canShare,
+    load,
+    save,
+    shareLink,
+    takeShared,
+    type Stories,
+  } from "./stories.ts";
   import type { LoreEditor } from "./loreEditor.ts";
   import Terminal from "./Terminal.svelte";
 
   /** How long to wait after a keystroke before restarting the preview. */
   const RESTART_DELAY = 500;
 
-  // $state so a loaded file can join the list and show up in the picker.
-  let stories = $state<Record<string, string>>({
-    "story.lore": storySource,
-    "grimoire.lore": grimoireSource,
-  });
-  const initialSource = stories["story.lore"];
+  // Whatever this browser was last looking at, or the stories that ship with
+  // the app if it has never been here.
+  const saved = load();
 
-  let storyName = $state("story.lore");
+  // $state so a loaded file can join the list and show up in the picker.
+  let stories = $state<Stories>(saved.stories);
+  const initialSource = saved.stories[saved.selected];
+
+  let storyName = $state(saved.selected);
   let source = $state(initialSource);
   let story = $derived(parse(source));
   // One list, in source order: the author reads down it, and a warning about
@@ -137,9 +145,29 @@
   function loadStory(name: string) {
     storyName = name;
     source = stories[name];
+    // A link belongs to the story it was made from, so it goes away with it.
+    shareLinkText = "";
+    shareStatus = "";
     // The editor holds its own copy of the text, so it has to be told.
     editor?.setDoc(source);
   }
+
+  $effect(() => {
+    // The pane is the story, so what is in it is what the list holds -- which
+    // is what makes switching away and back again keep the typing rather than
+    // reading the file as it was when it was opened.
+    stories[storyName] = source;
+  });
+
+  $effect(() => {
+    // Kept in the browser that wrote it, once the typing settles. A refresh,
+    // a closed tab, a machine that slept at the table: none of them should
+    // cost an evening's writing.
+    const snapshot = { ...stories };
+    const name = storyName;
+    const handle = setTimeout(() => save(snapshot, name), RESTART_DELAY);
+    return () => clearTimeout(handle);
+  });
 
   function exportStory() {
     const url = URL.createObjectURL(new Blob([source], { type: "text/plain" }));
@@ -155,8 +183,61 @@
     // Cleared so picking the same file twice still fires a change event.
     e.currentTarget.value = "";
     if (!file) return;
-    stories[file.name] = await file.text();
-    loadStory(file.name);
+    loadStory(addStory(stories, file.name, await file.text()));
+  }
+
+  /**
+   * Sharing is a button, not something the address bar does while you type.
+   * The URL here means which mode you are in -- that is what makes the back
+   * button the way out of play mode -- and a story written into it on every
+   * keystroke would drown that in a thousand entries nobody wants to walk
+   * back through.
+   */
+  let shareStatus = $state("");
+  /** Only set when the clipboard would not take the link; see below. */
+  let shareLinkText = $state("");
+  /**
+   * Something wrong with a link that *arrived*, as against feedback on a
+   * button that was pressed -- and so the one message here that play mode has
+   * to be able to say. A link cut short by whatever carried it leaves the
+   * story that was already on the device running, which looks exactly like
+   * success from across a table; the toolbar that would otherwise carry the
+   * news is off the side of the window in that mode.
+   */
+  let arrivalProblem = $state("");
+  let linkEl = $state<HTMLInputElement>();
+
+  /** Past which a link is worth a word of warning rather than a refusal. */
+  const LONG_LINK = 8000;
+
+  async function shareStory() {
+    shareStatus = "";
+    shareLinkText = "";
+
+    let link: string;
+    try {
+      link = await shareLink(storyName, source);
+    } catch {
+      shareStatus = "the link could not be made";
+      return;
+    }
+    const long = link.length > LONG_LINK;
+
+    try {
+      await navigator.clipboard.writeText(link);
+      shareStatus = long
+        ? "link copied -- a long one; some apps will cut it"
+        : "link copied";
+    } catch {
+      // The dev server on the table's own network is plain http, where a
+      // browser will not hand out the clipboard at all -- and that is the way
+      // this app is mostly run. So the link goes on the screen instead,
+      // selected, and copying it is the browser's ordinary business.
+      shareLinkText = link;
+      shareStatus = long ? "a long one; some apps will cut it" : "";
+      await tick();
+      linkEl?.select();
+    }
   }
 
   let firstParse = true;
@@ -212,14 +293,43 @@
     return loading;
   }
 
+  /**
+   * A link is an import, not a takeover: the story it carries lands in the
+   * list beside whatever this browser already had and gets selected, the same
+   * way a file does. Nothing that was here is written over, so a link opened
+   * on the machine the stories live on costs nothing.
+   */
+  function receiveShared() {
+    void takeShared()
+      .then((shared) => {
+        if (!shared) return;
+        arrivalProblem = "";
+        loadStory(addStory(stories, shared.name, shared.source));
+      })
+      .catch(
+        () =>
+          (arrivalProblem =
+            "that link could not be read -- this is not the story it was meant to open")
+      );
+  }
+
   onMount(() => {
     if (!play) void loadEditor();
+    receiveShared();
+    // A link pasted into a tab that already has this page open changes the
+    // fragment and nothing else: no load, so nothing on the way in would
+    // hear about it and the story would sit unread in the address bar. The
+    // one that arrives that way is as much an arrival as the one that came
+    // with the page. Clearing the fragment afterwards is a replace, which
+    // fires none of this again.
+    window.addEventListener("hashchange", receiveShared);
     // The URL is the mode, so going back to a URL is going back to a mode --
     // including forwards again into play.
     const onPopState = () =>
       showPlay(new URLSearchParams(location.search).has("play"));
     window.addEventListener("popstate", onPopState);
     return () => {
+      window.removeEventListener("hashchange", receiveShared);
       window.removeEventListener("popstate", onPopState);
       void loading?.then(() => editor?.destroy());
     };
@@ -251,9 +361,33 @@
         fast
       </label>
       <div class="rest">
+        {#if shareLinkText}
+          <!-- Only here because the clipboard would not take it: a link on a
+               plain-http dev server has to be copied by hand. -->
+          <input
+            bind:this={linkEl}
+            class="link"
+            readonly
+            value={shareLinkText}
+            aria-label="link to this story"
+            onfocus={(e) => e.currentTarget.select()}
+          />
+        {/if}
+        {#if shareStatus}
+          <span class="status">{shareStatus}</span>
+        {/if}
+        {#if arrivalProblem}
+          <span class="status problem">{arrivalProblem}</span>
+        {/if}
         <button onclick={() => setPlay(true)}>play</button>
         <button onclick={() => fileEl.click()}>load</button>
         <button onclick={exportStory}>export</button>
+        {#if canShare}
+          <button
+            onclick={shareStory}
+            title="a link carrying this story as it is now">share</button
+          >
+        {/if}
       </div>
       <input
         bind:this={fileEl}
@@ -284,6 +418,17 @@
 </div>
 
 {#if play}
+  {#if arrivalProblem}
+    <!-- The one piece of news play mode cannot afford to lose. The toolbar is
+         off the side of the window here, so without this a tablet opened on a
+         link that arrived cut short would sit on the table looking like it had
+         worked, running whatever story was on it before. Above the monitor
+         rather than below it, where the fullscreen offer already sits, and it
+         goes away when it has been read. -->
+    <button class="notice" title="dismiss" onclick={() => (arrivalProblem = "")}
+      >{arrivalProblem}</button
+    >
+  {/if}
   <!-- The two things play mode can do, one in each top corner and both
        invisible until hovered: the way out, and the way to fill the screen.
        They have to be reachable without a control sitting on the screen the
@@ -386,7 +531,31 @@
   .toolbar .rest {
     margin-left: auto;
     display: flex;
+    align-items: center;
     gap: 0.4rem;
+  }
+  /* Long by nature and never read, only copied -- so it is given a width it
+     can be dragged across rather than one that fits what is in it. */
+  .toolbar .link {
+    width: 16rem;
+    font: inherit;
+    font-size: 0.8rem;
+    color: #999;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    background: #101010;
+  }
+  /* A word about what just happened, in the grey of everything that is not
+     the story. */
+  .toolbar .status {
+    font-size: 0.8rem;
+    color: #999;
+  }
+  /* A story that did not arrive is the same order of thing as a line that did
+     not parse, so it is the same red. */
+  .toolbar .status.problem {
+    color: #ff6b6b;
   }
   .errors {
     flex: 0 0 auto;
@@ -450,6 +619,27 @@
   }
   .fill {
     right: 1rem;
+  }
+
+  /* Play mode's bad news: the offer's strip, at the top of the surround
+     rather than the bottom so the two never sit on each other, and in the red
+     the editor uses for a story that did not come out right. */
+  .notice {
+    position: fixed;
+    top: 0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    max-width: calc(100vw - 6rem);
+    padding: 0.35rem 0.8rem;
+    border: 1px solid #4a2020;
+    border-radius: 999px;
+    background: #191919;
+    color: #ff6b6b;
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: center;
+    cursor: pointer;
   }
 
   /* The one thing in play mode that is drawn without being asked for, so it
