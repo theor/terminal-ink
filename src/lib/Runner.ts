@@ -26,6 +26,19 @@ export interface RunChoice {
   tags: Tag[];
 }
 
+/**
+ * One player action that moved the story on -- a choice taken, or a gate
+ * answered correctly. `resume(false)` leaves the story exactly where it was,
+ * so a wrong answer is not one of these; there is nothing to put back.
+ *
+ * A choice carries the label as it read on screen -- interpolated, not the
+ * raw source -- so a caller can show the path taken without re-running the
+ * story to find out what `{var}` stood for at the time.
+ */
+export type HistoryEntry =
+  | { kind: "choice"; index: number; label: string }
+  | { kind: "resume" };
+
 export interface StepResult {
   /** Emitted since the previous step, in order. */
   outputs: Output[];
@@ -89,6 +102,12 @@ export class Runner {
 
   choices: RunChoice[] = [];
   halted = false;
+  /**
+   * Every choice and gate answer taken since the last `start()`, in order.
+   * Recorded so a session can be rebuilt on a `Runner` for a different --
+   * typically freshly edited -- parse of the same story: see `replay()`.
+   */
+  history: HistoryEntry[] = [];
 
   constructor(story: Story, from?: string) {
     this.story = story;
@@ -121,6 +140,7 @@ export class Runner {
     this.cursor = null;
     this.choices = [];
     this.halted = false;
+    this.history = [];
     this.vars.clear();
     if (!block) {
       this.halted = true;
@@ -178,6 +198,12 @@ export class Runner {
     const node = childrenOf(screen).filter(isChoice)[chosen.index];
     if (!node) return this.result([]);
 
+    // Recorded by the menu position `select` was called with -- what a caller
+    // replaying this history will call `select` with in turn -- not `chosen`'s
+    // index among *all* the screen's choices, which a hidden one can leave
+    // gaps in. The label is `chosen`'s, already rendered, not `node`'s raw
+    // segments -- what the player read, not what the author wrote.
+    this.history.push({ kind: "choice", index, label: chosen.label });
     this.choices = [];
     // The choice's body runs as its own little screen; whether that screen
     // becomes the new one is decided in resolveChoice, once the body is done.
@@ -197,9 +223,45 @@ export class Runner {
   resume(ok: boolean): StepResult {
     if (!this.pause) return this.result([]);
     if (!ok) return this.result([]);
+    this.history.push({ kind: "resume" });
     const before = this.outputs.length;
     this.pause = undefined;
     return this.run(before);
+  }
+
+  /**
+   * Rebuilds a session from a history recorded on this -- or, the whole point
+   * of this, another -- `Runner` for the same story: the hot-reload path,
+   * where an edit produces a fresh `Story` and the player should not be
+   * dropped back at the top of the block for it. `replay([])` is exactly
+   * `start()`, so a caller need not special-case "nothing to replay".
+   *
+   * A gate is answered `true` unconditionally, including one behind a
+   * `#password` the edit just changed: replaying is catching the player back
+   * up to where they already proved themselves, not asking them to prove it
+   * again on every keystroke.
+   *
+   * Stops at the first entry that no longer applies -- a choice past the end
+   * of a menu an edit shortened, a gate an edit removed -- and leaves the
+   * player on whatever screen that was, rather than guessing where they meant
+   * to go. The outputs of every step actually replayed are concatenated, in
+   * order, so a caller can draw the whole path arrived at in one go.
+   */
+  replay(history: HistoryEntry[]): StepResult {
+    let step = this.start();
+    const outputs = [...step.outputs];
+    for (const entry of history) {
+      if (this.halted) break;
+      if (entry.kind === "resume") {
+        if (!this.pause) break;
+        step = this.resume(true);
+      } else {
+        if (this.pause || entry.index >= this.choices.length) break;
+        step = this.select(entry.index);
+      }
+      outputs.push(...step.outputs);
+    }
+    return { ...step, outputs };
   }
 
   // --- execution ----------------------------------------------------------

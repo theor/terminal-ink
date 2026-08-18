@@ -342,6 +342,121 @@ test("a password gate stops execution until it is answered", () => {
   assert.deepEqual(labels(right), ["Diagnostics"]);
 });
 
+// --- history & replay -------------------------------------------------------
+
+test("history records the menu position and label of each choice taken", () => {
+  const r = runner("= main\n* One -> a\n* Two -> b\n= a\nA\n* ok\n= b\nB\n* x\n* ok\n");
+  r.start();
+  r.select(1); // Two
+  r.select(1); // ok, the second choice on b's screen
+  assert.deepEqual(r.history, [
+    { kind: "choice", index: 1, label: "Two" },
+    { kind: "choice", index: 1, label: "ok" },
+  ]);
+});
+
+test("a choice's recorded label is interpolated, not the raw source", () => {
+  const r = runner("= main\n#set name = \"Ripley\"\n* Hello {name}\n");
+  r.start();
+  r.select(0);
+  assert.deepEqual(r.history, [{ kind: "choice", index: 0, label: "Hello Ripley" }]);
+});
+
+test("a hidden choice does not shift the recorded index", () => {
+  // `select`'s argument is a menu position, so history has to hold that
+  // position -- not the node's position among every choice on the screen,
+  // which is what a `#if` can leave gaps in.
+  const r = runner(
+    ["= main", "* First -> a", "* Hidden #if never = \"yes\"", "* Third -> b", "= a", "A", "* ok", "= b", "B", "* ok"].join("\n")
+  );
+  r.start();
+  r.select(1); // the second *offered* choice, which is "Third"
+  assert.deepEqual(r.history, [{ kind: "choice", index: 1, label: "Third" }]);
+  assert.equal(r.currentBlock?.name, "b");
+});
+
+test("history records a correct gate answer, not a wrong one", () => {
+  const r = runner(
+    ["= start", "PW #password 123", "-> main", "= main", "Home", "* ok"].join("\n")
+  );
+  r.start();
+  r.resume(false);
+  r.resume(false);
+  r.resume(true);
+  assert.deepEqual(r.history, [{ kind: "resume" }]);
+});
+
+test("start() clears history", () => {
+  const r = runner("= main\n* One\n* Two\n");
+  r.start();
+  r.select(0);
+  r.start();
+  assert.deepEqual(r.history, []);
+});
+
+test("replay([]) is exactly start()", () => {
+  const source = "= main\nHello\n* One\n* Two\n";
+  const started = runner(source).start();
+  const replayed = runner(source).replay([]);
+  assert.deepEqual(replayed, started);
+});
+
+test("replay reconstructs state, position and the whole path's output", () => {
+  const source = [
+    "= main #set generator = \"off\"",
+    "Generator: {generator}",
+    "* Toggle -> next",
+    "  #set generator = \"on\"",
+    "= next",
+    "Next: {generator}",
+    "* Continue -> systems",
+    "= systems",
+    "Systems menu",
+    "* ok",
+  ].join("\n");
+  const live = runner(source);
+  live.start();
+  live.select(0); // Toggle -> next, generator on
+  live.select(0); // Continue -> systems
+
+  const fresh = runner(source);
+  const step = fresh.replay(live.history);
+  assert.equal(fresh.currentBlock?.name, "systems");
+  assert.deepEqual(fresh.vars.get("generator"), str("on"));
+  assert.deepEqual(
+    lines(step),
+    ["Generator: off", "Next: on", "Systems menu"],
+    "every step replayed contributes to the one result, not just the last"
+  );
+});
+
+test("replay answers gates unconditionally, catching the player back up", () => {
+  const live = runner(storySource);
+  live.start();
+  live.resume(true);
+  live.select(0); // Diagnostics
+
+  const fresh = runner(storySource);
+  const step = fresh.replay(live.history);
+  assert.equal(step.pause, undefined, "the gate is passed without being asked again");
+  assert.equal(fresh.currentBlock?.name, "diagnostics");
+  assert.deepEqual(labels(step), ["Toggle generator", "Back"]);
+});
+
+test("replay stops at a choice an edit removed, rather than guessing", () => {
+  const before = "= main\n* One -> a\n* Two -> b\n= a\nA\n* ok\n= b\nB\n* ok\n";
+  const live = runner(before);
+  live.start();
+  live.select(1); // Two
+
+  // The edit dropped the second choice.
+  const after = "= main\n* One -> a\n= a\nA\n* ok\n";
+  const fresh = runner(after);
+  const step = fresh.replay(live.history);
+  assert.equal(fresh.currentBlock?.name, "main", "replay stopped before the missing choice");
+  assert.deepEqual(labels(step), ["One"]);
+});
+
 // --- the real story -------------------------------------------------------
 
 const storySource = readFileSync(

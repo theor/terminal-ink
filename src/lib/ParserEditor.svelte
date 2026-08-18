@@ -2,7 +2,7 @@
   import { onMount, tick } from "svelte";
 
   import { blockAt, isPrelude, parse, type ParseError } from "./Parser.ts";
-  import { Runner } from "./Runner.ts";
+  import { Runner, type HistoryEntry } from "./Runner.ts";
   import {
     addStory,
     canShare,
@@ -74,12 +74,31 @@
   // Replaced -- not mutated -- so the Terminal restarts on a fresh Runner.
   let runner = $state(new Runner(parse(initialSource)));
 
+  /**
+   * What the *next* `runner` swap should replay, so an edit does not cost the
+   * player their place -- see the hot-reload effect below, which is the one
+   * place this is computed. Left empty for a restart or a story switch: those
+   * are the player asking to start over, not a change to catch up on.
+   */
+  let replayFrom = $state<HistoryEntry[]>([]);
+  // What the hot-reload effect last built a `runner` for, so it can tell an
+  // edit within the same block from the cursor -- or the story -- having
+  // moved on: only the former is something to replay onto.
+  let lastFrom: string | undefined;
+  let lastStoryName: string | undefined;
+
+  /** The live runner's history, kept in step by `Terminal`'s `onAdvance`. */
+  let liveHistory = $state<HistoryEntry[]>([]);
+  /** Whether the history panel is showing; off by default, out of the way. */
+  let showHistory = $state(false);
+
   let divEl: HTMLDivElement = $state(null!);
   let fileEl: HTMLInputElement = $state(null!);
   // $state so the error effect below re-runs once the editor has loaded.
   let editor = $state<LoreEditor | undefined>();
 
   function restart() {
+    replayFrom = [];
     runner = new Runner(story, startName);
   }
 
@@ -281,11 +300,21 @@
     // it is skipped.
     const current = story;
     const from = startName;
+    const name = storyName;
     if (firstParse) {
       firstParse = false;
+      lastFrom = from;
+      lastStoryName = name;
       return;
     }
     const handle = setTimeout(() => {
+      // The same block of the same story: an edit, and the whole reason this
+      // exists -- the player's path through it is still worth having. Anything
+      // else -- the cursor moved to another block, or the story was swapped --
+      // is a different session, so there is nothing here to replay.
+      replayFrom = from === lastFrom && name === lastStoryName ? [...runner.history] : [];
+      lastFrom = from;
+      lastStoryName = name;
       runner = new Runner(current, from);
     }, RESTART_DELAY);
     return () => clearTimeout(handle);
@@ -398,6 +427,13 @@
         <input type="checkbox" bind:checked={fast} />
         fast
       </label>
+      <button
+        aria-pressed={showHistory}
+        title="the choices taken in this preview session"
+        onclick={() => (showHistory = !showHistory)}
+      >
+        history
+      </button>
       <div class="rest">
         {#if shareLinkText}
           <!-- Only here because the clipboard would not take it: a link on a
@@ -435,6 +471,17 @@
         onchange={importStory}
       />
     </div>
+    {#if showHistory}
+      <ol class="history">
+        {#if liveHistory.length === 0}
+          <li class="empty">no choices made yet</li>
+        {:else}
+          {#each liveHistory as entry, i (i)}
+            <li>{entry.kind === "choice" ? entry.label : "— gate passed —"}</li>
+          {/each}
+        {/if}
+      </ol>
+    {/if}
     <div bind:this={divEl} class="editor"></div>
     <ul class="errors" class:empty={problems.length === 0}>
       {#each problems as problem}
@@ -451,7 +498,14 @@
   </div>
 
   <div class="pane preview">
-    <Terminal {runner} fullscreen={play} {fast} manualStart={openedInPlay} />
+    <Terminal
+      {runner}
+      fullscreen={play}
+      {fast}
+      manualStart={openedInPlay}
+      {replayFrom}
+      onAdvance={(h) => (liveHistory = h)}
+    />
   </div>
 </div>
 
@@ -564,6 +618,12 @@
     margin: 0;
     accent-color: var(--accent);
   }
+  /* A toggle button reads the same way the checkboxes' labels do: on is the
+     accent, off is the ordinary grey. */
+  .toolbar button[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
   /* Everything after this sits at the right-hand end: what you do *to* the
      file, rather than what you are looking at. */
   .toolbar .rest {
@@ -621,6 +681,28 @@
   /* A warning is not a broken line: the story runs exactly as written. */
   .errors button.warning {
     color: #d7ba7d;
+  }
+  /* The path taken through the preview so far -- same shape as `.errors`
+     (capped, scrolling, out of the way by default), but the accent's grey
+     rather than red: nothing here is wrong. */
+  .history {
+    flex: 0 0 auto;
+    max-height: 8rem;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0.3rem 0;
+    list-style: decimal inside;
+    font-size: 0.8rem;
+    color: #999;
+    background: #191919;
+    border-bottom: 1px solid #2b2b2b;
+  }
+  .history li {
+    padding: 0.15rem 0.6rem;
+  }
+  .history .empty {
+    list-style: none;
+    font-style: italic;
   }
   .preview {
     overflow: hidden;

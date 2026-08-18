@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { typewriter } from "./TypingEffect.ts";
-  import type { Runner, RunChoice, StepResult } from "./Runner.ts";
+  import type { HistoryEntry, Runner, RunChoice, StepResult } from "./Runner.ts";
   import type { Tag } from "./Parser.ts";
   import { tagSpec, tagValues, type TerminalUI } from "./tags.ts";
   import { DEFAULT_THEME, themeFor } from "./themes/index.ts";
@@ -22,11 +22,30 @@
      * and a story that boots to an empty screen has already been missed.
      */
     manualStart = false,
+    /**
+     * A history to fast-forward through instead of starting cold -- the
+     * hot-reload path: the parent hands over a freshly built `Runner` for a
+     * story that was just edited, alongside the path the player had already
+     * taken through the version before it. Replayed at once, with none of the
+     * usual pacing, so an edit does not cost the player their place -- or make
+     * them sit through the boot sequence again to get it back.
+     */
+    replayFrom = [],
+    /**
+     * Told the runner's history after every step -- a fresh array, since
+     * `history` is mutated in place and a caller holding onto that same
+     * reference would never see it change. A caller that wants to show the
+     * path taken so far (a history panel) uses this; nothing here reads it
+     * back.
+     */
+    onAdvance,
   }: {
     runner: Runner;
     fullscreen?: boolean;
     fast?: boolean;
     manualStart?: boolean;
+    replayFrom?: HistoryEntry[];
+    onAdvance?: (history: HistoryEntry[]) => void;
   } = $props();
 
   interface Line {
@@ -86,14 +105,17 @@
         return;
       }
       awaitingStart = false;
-      void drain(generation, r.start());
+      // `replay([])` is exactly `start()`, so this covers both a cold start
+      // and a hot reload without telling them apart -- only whether there is
+      // anything to catch up on decides whether it is instant.
+      void drain(generation, r.replay(replayFrom), replayFrom.length > 0);
     });
   });
 
   function begin() {
     awaitingStart = false;
     started = true;
-    void drain(generation, runner.start());
+    void drain(generation, runner.replay(replayFrom), replayFrom.length > 0);
   }
 
   function typed(): Promise<void> {
@@ -108,18 +130,42 @@
   let heading = false;
 
   /**
+   * Set for the length of a `drain()` call that is catching a reloaded story
+   * back up to a replayed history, rather than read off the `fast` prop: that
+   * is a standing choice the author made for *this* preview, and replaying
+   * must not look like it turned "fast" on for whatever comes after.
+   */
+  let skipPauses = false;
+
+  /**
+   * Where `#clear` and `#theme` land while a replay is catching up, instead
+   * of `lines`/`themeName` themselves -- a plain object, not reactive state,
+   * so every screen and every clear a replayed history passes through updates
+   * silently. Only the point it lands on is ever committed, in one write, so
+   * the screen does not flash through every stop on the way there. `null`
+   * means live play, where each change should render as it happens.
+   */
+  let buffer: { lines: Line[]; themeName: string } | null = null;
+
+  /**
    * What a tag is allowed to do to the display. The tags themselves live in
    * tags.ts -- this is only the set of levers they can pull, so a new display
    * tag is an entry there rather than another branch in the loop below.
    */
   const ui: TerminalUI = {
-    clear: () => (lines = []),
+    clear: () => {
+      if (buffer) buffer.lines = [];
+      else lines = [];
+    },
     setSpeed: (ms) => (speed = ms),
     // A theme change is handled here rather than in the runner: it changes how
     // the story looks, not what it does.
-    setTheme: (name) => (themeName = name),
+    setTheme: (name) => {
+      if (buffer) buffer.themeName = name;
+      else themeName = name;
+    },
     asHeading: () => (heading = true),
-    wait: (ms) => (fast ? Promise.resolve() : wait(ms)),
+    wait: (ms) => (fast || skipPauses ? Promise.resolve() : wait(ms)),
   };
 
   /** Runs one phase of whatever the tags on a line do to the display. */
@@ -132,8 +178,19 @@
     }
   }
 
-  /** Prints a step's outputs in order, then offers whatever comes next. */
-  async function drain(gen: number, step: StepResult) {
+  /**
+   * Prints a step's outputs in order, then offers whatever comes next.
+   * `instant` is for a step that is catching up to a replayed history rather
+   * than being read for the first time: every pause it would otherwise sit
+   * through -- typing speed and `#delay` alike -- is skipped, the same as
+   * `fast`, and every screen along the way is built up off-screen (`buffer`)
+   * rather than drawn -- there is no typewriter to wait for on a line nobody
+   * is being shown, and no reason to flash through the `#clear`s a replayed
+   * history's earlier screens happened to have. Only the last one committed.
+   */
+  async function drain(gen: number, step: StepResult, instant = false) {
+    skipPauses = instant;
+    buffer = instant ? { lines: [], themeName } : null;
     for (const output of step.outputs) {
       if (gen !== generation) return;
 
@@ -142,21 +199,35 @@
       if (gen !== generation) return;
 
       if (output.text !== null) {
-        lines = [
-          ...lines,
-          {
-            id: nextId++,
-            text: heading ? theme.strings.title(output.text) : output.text,
-            title: heading,
-            speed: fast ? 0 : speed,
-          },
-        ];
-        await typed();
-        if (gen !== generation) return;
+        // Off `themeFor` directly rather than the reactive `theme`: while
+        // buffering, a `#theme` earlier in this same pass has only reached
+        // `buffer.themeName` -- the real one does not move until commit, and
+        // a title formatted off it here would be dressed in the theme this
+        // screen is leaving, not the one it is arriving in.
+        const activeTheme = themeFor(buffer ? buffer.themeName : themeName);
+        const line = {
+          id: nextId++,
+          text: heading ? activeTheme.strings.title(output.text) : output.text,
+          title: heading,
+          speed: fast || instant ? 0 : speed,
+        };
+        if (buffer) {
+          buffer.lines = [...buffer.lines, line];
+        } else {
+          lines = [...lines, line];
+          await typed();
+          if (gen !== generation) return;
+        }
       }
 
       await runView(output.tags, "after");
       if (gen !== generation) return;
+    }
+    skipPauses = false;
+    if (buffer) {
+      lines = buffer.lines;
+      themeName = buffer.themeName;
+      buffer = null;
     }
 
     halted = step.halted;
@@ -169,6 +240,7 @@
       choices = step.choices;
       selected = 0;
     }
+    onAdvance?.([...runner.history]);
   }
 
   function choose(index: number) {
@@ -182,8 +254,13 @@
    * Takes the keyboard the moment the prompt appears. A password is the one
    * point where the story wants typing rather than a choice, and a player who
    * has to find and click the line first has already typed into nothing.
+   *
+   * Except when the script editor already has it: in edit mode the preview
+   * sits beside CodeMirror, and a restart landing on a password mid-sentence
+   * should not reach over and cut the line being typed there.
    */
   function focusOnShow(node: HTMLElement) {
+    if (document.activeElement?.closest(".cm-content")) return;
     node.focus();
   }
 
